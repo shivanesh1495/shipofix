@@ -1,0 +1,79 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:dev.sqlite"
+}
+
+model Session {
+  id                  String    @id
+  shop                String
+  state               String
+  isOnline            Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              BigInt?
+  firstName           String?
+  lastName            String?
+  email               String?
+  accountOwner        Boolean   @default(false)
+  locale              String?
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+}
+
+model ZoneRule {
+  id              String   @id @default(cuid())
+  shop            String
+  deliveryZoneGid String   @unique
+  name            String
+  logicType       String   @default("STANDARD_TIER")
+  currency        String   @default("INR")
+  rulesJson       String   @default("{}")
+  countries       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([shop, deliveryZoneGid])
+  @@index([shop, updatedAt])
+}
+
+model AppSetting {
+  shop             String   @id
+  bulkEditEnabled  Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model BulkEditUpload {
+  shop       String   @id
+  filename   String
+  size       Int
+  data       Bytes
+  uploadedAt DateTime @default(now())
+}
+
+/// Bulk-edit rules — parallel to ZoneRule but populated only via the Excel
+/// upload. The carrier service picks between ZoneRule and BulkEditRule based
+/// on AppSetting.bulkEditEnabled, so toggling the feature swaps which set is
+/// applied at checkout without losing the other.
+model BulkEditRule {
+  id              String   @id @default(cuid())
+  shop            String
+  deliveryZoneGid String
+  name            String
+  logicType       String   @default("STANDARD_TIER")
+  currency        String   @default("INR")
+  rulesJson       String   @default("{}")
+  countries       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([shop, deliveryZoneGid])
+  @@index([shop, updatedAt])
+}

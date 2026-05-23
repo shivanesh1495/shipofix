@@ -1,0 +1,33 @@
+{
+  "data": {
+    "carrierServices": {
+      "edges": [
+        {
+          "node": {
+            "name": "Shipx - Shipping Rates & Rules",
+            "callbackUrl": null,
+            "active": true
+          }
+        },
+        {
+          "node": {
+            "name": "Custom Carrier Shipping Engine",
+            "callbackUrl": "https://return-geographical-authentic-minus.trycloudflare.com/api/shipping",
+            "active": true
+          }
+        }
+      ]
+    }
+  },
+  "extensions": {
+    "cost": {
+      "requestedQueryCost": 6,
+      "actualQueryCost": 3,
+      "throttleStatus": {
+        "maximumAvailable": 2000,
+        "currentlyAvailable": 1997,
+        "restoreRate": 100
+      }
+    }
+  }
+}

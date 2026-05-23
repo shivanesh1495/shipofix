@@ -1,0 +1,378 @@
+[2026-04-02T08:05:12.488Z] === INCOMING CARRIER REQUEST ===
+[2026-04-02T08:05:12.490Z] HMAC verification FAILED — returning empty rates
+[2026-04-02T11:39:43.580Z] === INCOMING CARRIER REQUEST ===
+[2026-04-02T11:39:43.613Z] {"event":"HMAC_DEBUG","hmacMatch":true,"secretLoaded":true,"hmacHeader":"L87zwMAbWXKKZJd3kYBi+R0KzbgdT8bNuiyUGVtzy4w=","generatedHmac":"L87zwMAbWXKKZJd3kYBi+R0KzbgdT8bNuiyUGVtzy4w="}
+[2026-04-02T11:39:43.647Z] HMAC verification PASSED
+[2026-04-02T11:39:43.678Z] {"event":"REQUEST_PARSED","shop":"zofonix-test.myshopify.com","destination":{"country":"IN","province":"TN","city":"Salem"},"itemCount":1,"items":[{"name":"The Multi-managed Snowboard","grams":5000,"quantity":1,"price":62995}],"currency":"INR"}
+[2026-04-02T11:39:43.717Z] {"event":"CART_TOTALS","totalGrams":5000,"totalKg":"5.000","lineItemTotalPrice":62995,"totalPrice":629.95,"currency":"INR"}
+[2026-04-02T11:39:43.792Z] {"event":"DB_CANDIDATES","count":2,"rules":[{"name":"International","logic":"STANDARD_TIER","gid":"gid://shopify/DeliveryZone/433841537283"},{"name":"Domestic","logic":"WEIGHT_RANGE","gid":"gid://shopify/DeliveryZone/433841471747"}]}
+[2026-04-02T11:39:43.833Z] {"event":"SCORE_CHECK","ruleName":"International","score":-1,"destinationCountry":"IN","destinationProvince":"TN"}
+[2026-04-02T11:39:43.860Z] {"event":"SCORE_CHECK","ruleName":"Domestic","score":100,"destinationCountry":"IN","destinationProvince":"TN"}
+[2026-04-02T11:39:43.881Z] {"event":"MATCH_SUCCESS","ruleName":"Domestic","logicType":"WEIGHT_RANGE","score":100}
+[2026-04-02T11:39:43.929Z] {"event":"RULES_PARSED","logicType":"WEIGHT_RANGE","rules":[{"min":0,"max":null,"rate":"10","min_kg":"10","max_kg":"100"}]}
+[2026-04-02T11:39:43.955Z] {"event":"RATE_CALCULATED","calculatedRate":null,"serviceName":"Weight Based Rate","serviceCode":"weight_range","description":"","totalKg":5,"totalPrice":629.95}
+[2026-04-02T11:39:43.981Z] RATE_NULL — returning empty rates
+[2026-04-02T11:39:55.272Z] === INCOMING CARRIER REQUEST ===
+[2026-04-02T11:39:55.277Z] {"event":"HMAC_DEBUG","hmacMatch":true,"secretLoaded":true,"hmacHeader":"pjS67P7pv/u3IwBXvyPasZHnEhkZXiSDQyKqvusA7NY=","generatedHmac":"pjS67P7pv/u3IwBXvyPasZHnEhkZXiSDQyKqvusA7NY="}
+[2026-04-02T11:39:55.308Z] HMAC verification PASSED
+[2026-04-02T11:39:55.349Z] {"event":"REQUEST_PARSED","shop":"zofonix-test.myshopify.com","destination":{"country":"IN","province":"TN","city":""},"itemCount":1,"items":[{"name":"The Multi-managed Snowboard","grams":5000,"quantity":1,"price":62995}],"currency":"INR"}
+[2026-04-02T11:39:55.375Z] {"event":"CART_TOTALS","totalGrams":5000,"totalKg":"5.000","lineItemTotalPrice":62995,"totalPrice":629.95,"currency":"INR"}
+[2026-04-02T11:39:55.425Z] {"event":"DB_CANDIDATES","count":2,"rules":[{"name":"International","logic":"STANDARD_TIER","gid":"gid://shopify/DeliveryZone/433841537283"},{"name":"Domestic","logic":"WEIGHT_RANGE","gid":"gid://shopify/DeliveryZone/433841471747"}]}
+[2026-04-02T11:39:55.450Z] {"event":"SCORE_CHECK","ruleName":"International","score":-1,"destinationCountry":"IN","destinationProvince":"TN"}
+[2026-04-02T11:39:55.475Z] {"event":"SCORE_CHECK","ruleName":"Domestic","score":100,"destinationCountry":"IN","destinationProvince":"TN"}
+[2026-04-02T11:39:55.499Z] {"event":"MATCH_SUCCESS","ruleName":"Domestic","logicType":"WEIGHT_RANGE","score":100}
+[2026-04-02T11:39:55.529Z] {"event":"RULES_PARSED","logicType":"WEIGHT_RANGE","rules":[{"min":0,"max":null,"rate":"10","min_kg":"10","max_kg":"100"}]}
+[2026-04-02T11:39:55.554Z] {"event":"RATE_CALCULATED","calculatedRate":null,"serviceName":"Weight Based Rate","serviceCode":"weight_range","description":"","totalKg":5,"totalPrice":629.95}
+[2026-04-02T11:39:55.606Z] RATE_NULL — returning empty rates
+[2026-04-02T11:39:56.629Z] === INCOMING CARRIER REQUEST ===
+[2026-04-02T11:39:56.635Z] {"event":"HMAC_DEBUG","hmacMatch":true,"secretLoaded":true,"hmacHeader":"Is28Gi63iAUwU7I7oTsIRaNnVmI3NXTSndDi73lTFEQ=","generatedHmac":"Is28Gi63iAUwU7I7oTsIRaNnVmI3NXTSndDi73lTFEQ="}
+[2026-04-02T11:39:56.664Z] HMAC verification PASSED
+[2026-04-02T11:39:56.698Z] {"event":"REQUEST_PARSED","shop":"zofonix-test.myshopify.com","destination":{"country":"IN","province":"TN","city":"Coimbatore"},"itemCount":1,"items":[{"name":"The Multi-managed Snowboard","grams":5000,"quantity":1,"price":62995}],"currency":"INR"}
+[2026-04-02T11:39:56.729Z] {"event":"CART_TOTALS","totalGrams":5000,"totalKg":"5.000","lineItemTotalPrice":62995,"totalPrice":629.95,"currency":"INR"}
+[2026-04-02T11:39:56.763Z] {"event":"DB_CANDIDATES","count":2,"rules":[{"name":"International","logic":"STANDARD_TIER","gid":"gid://shopify/DeliveryZone/433841537283"},{"name":"Domestic","logic":"WEIGHT_RANGE","gid":"gid://shopify/DeliveryZone/433841471747"}]}
+[2026-04-02T11:39:56.781Z] {"event":"SCORE_CHECK","ruleName":"International","score":-1,"destinationCountry":"IN","destinationProvince":"TN"}
+[2026-04-02T11:39:56.797Z] {"event":"SCORE_CHECK","ruleName":"Domestic","score":100,"destinationCountry":"IN","destinationProvince":"TN"}
+[2026-04-02T11:39:56.817Z] {"event":"MATCH_SUCCESS","ruleName":"Domestic","logicType":"WEIGHT_RANGE","score":100}
+[2026-04-02T11:39:56.834Z] {"event":"RULES_PARSED","logicType":"WEIGHT_RANGE","rules":[{"min":0,"max":null,"rate":"10","min_kg":"10","max_kg":"100"}]}
+[2026-04-02T11:39:56.851Z] {"event":"RATE_CALCULATED","calculatedRate":null,"serviceName":"Weight Based Rate","serviceCode":"weight_range","description":"","totalKg":5,"totalPrice":629.95}
+[2026-04-02T11:39:56.869Z] RATE_NULL — returning empty rates
+[2026-04-02T11:45:04.108Z] === INCOMING CARRIER REQUEST ===
+[2026-04-02T11:45:04.113Z] {"event":"HMAC_DEBUG","hmacMatch":true,"secretLoaded":true,"hmacHeader":"upRRTuf/B0Jbw/C8oJzKZ2qByhnWF/7sTFrSayKEasA=","generatedHmac":"upRRTuf/B0Jbw/C8oJzKZ2qByhnWF/7sTFrSayKEasA="}
+[2026-04-02T11:45:04.139Z] HMAC verification PASSED
+[2026-04-02T11:45:04.186Z] {"event":"REQUEST_PARSED","shop":"zofonix-test.myshopify.com","destination":{"country":"IN","province":"TN","city":"Salem"},"itemCount":1,"items":[{"name":"The Multi-managed Snowboard","grams":5000,"quantity":1,"price":62995}],"currency":"INR"}
+[2026-04-02T11:45:04.214Z] {"event":"CART_TOTALS","totalGrams":5000,"totalKg":"5.000","lineItemTotalPrice":62995,"totalPrice":629.95,"currency":"INR"}
+[2026-04-02T11:45:04.261Z] {"event":"DB_CANDIDATES","count":2,"rules":[{"name":"International","logic":"STANDARD_TIER","gid":"gid://shopify/DeliveryZone/433841537283"},{"name":"Domestic","logic":"WEIGHT_MULTIPLIER","gid":"gid://shopify/DeliveryZone/433841471747"}]}
+[2026-04-02T11:45:04.285Z] {"event":"SCORE_CHECK","ruleName":"International","score":-1,"destinationCountry":"IN","destinationProvince":"TN"}
+[2026-04-02T11:45:04.309Z] {"event":"SCORE_CHECK","ruleName":"Domestic","score":100,"destinationCountry":"IN","destinationProvince":"TN"}
+[2026-04-02T11:45:04.329Z] {"event":"MATCH_SUCCESS","ruleName":"Domestic","logicType":"WEIGHT_MULTIPLIER","score":100}
+[2026-04-02T11:45:04.348Z] {"event":"RULES_PARSED","logicType":"WEIGHT_MULTIPLIER","rules":{"0":{"min":0,"max":null,"rate":"10","min_kg":"10","max_kg":"100"},"rate_per_kg":"10"}}
+[2026-04-02T11:45:04.396Z] {"event":"RATE_CALCULATED","calculatedRate":50,"serviceName":"Per KG Dynamic Shipping","serviceCode":"weight_multiplier","description":"5.00kg × ₹10/kg","totalKg":5,"totalPrice":629.95}
+[2026-04-02T11:45:04.422Z] {"event":"RESPONSE_SENT","rates":[{"service_name":"Per KG Dynamic Shipping","service_code":"weight_multiplier","total_price":"5000","currency":"INR","description":"5.00kg × ₹10/kg","min_delivery_date":"","max_delivery_date":""}]}
+[2026-04-03T05:33:34.976Z] === INCOMING CARRIER REQUEST ===
+[2026-04-03T05:33:34.981Z] {"event":"HMAC_DEBUG","hmacMatch":true,"secretLoaded":true,"hmacHeader":"3FcMQ/vf61Q2nVEJdvhH4shGbkncU+3LXtjj6h+fwjc=","generatedHmac":"3FcMQ/vf61Q2nVEJdvhH4shGbkncU+3LXtjj6h+fwjc="}
+[2026-04-03T05:33:34.990Z] HMAC verification PASSED
+[2026-04-03T05:33:35.001Z] {"event":"REQUEST_PARSED","shop":"zofonix-test.myshopify.com","destination":{"country":"AU","province":null,"city":"rate test"},"itemCount":1,"items":[{"name":"","grams":100,"quantity":1,"price":0}],"currency":"INR"}
+[2026-04-03T05:33:35.014Z] {"event":"CART_TOTALS","totalGrams":100,"totalKg":"0.100","lineItemTotalPrice":0,"totalPrice":0,"currency":"INR"}
+[2026-04-03T05:33:35.034Z] {"event":"DB_CANDIDATES","count":1,"rules":[{"name":"International","logic":"STANDARD_TIER","gid":"gid://shopify/DeliveryZone/433841537283"}]}
+[2026-04-03T05:33:35.042Z] {"event":"SCORE_CHECK","ruleName":"International","score":50,"destinationCountry":"AU","destinationProvince":""}
+[2026-04-03T05:33:35.055Z] {"event":"MATCH_SUCCESS","ruleName":"International","logicType":"STANDARD_TIER","score":50}
+[2026-04-03T05:33:35.076Z] {"event":"RULES_PARSED","logicType":"STANDARD_TIER","rules":{"0":{"min":0,"max":null,"rate":0,"min_kg":"1"},"flat_rate":"100"}}
+[2026-04-03T05:33:35.099Z] {"event":"RATE_CALCULATED","calculatedRate":100,"serviceName":"Standard Shipping","serviceCode":"standard_tier","description":"","totalKg":0.1,"totalPrice":0}
+[2026-04-03T05:33:35.112Z] {"event":"RESPONSE_SENT","rates":[{"service_name":"Standard Shipping","service_code":"standard_tier","total_price":"10000","currency":"INR","description":"","min_delivery_date":"","max_delivery_date":""}]}
+[2026-04-03T05:33:35.541Z] === INCOMING CARRIER REQUEST ===
+[2026-04-03T05:33:35.544Z] {"event":"HMAC_DEBUG","hmacMatch":true,"secretLoaded":true,"hmacHeader":"6dv9PW5jpDHXW7tmqUW/ZBBUqUKqISuNebdDTCU4eOM=","generatedHmac":"6dv9PW5jpDHXW7tmqUW/ZBBUqUKqISuNebdDTCU4eOM="}
+[2026-04-03T05:33:35.551Z] HMAC verification PASSED
+[2026-04-03T05:33:35.560Z] {"event":"REQUEST_PARSED","shop":"zofonix-test.myshopify.com","destination":{"country":"CA","province":"ON","city":"rate test"},"itemCount":1,"items":[{"name":"","grams":100,"quantity":1,"price":0}],"currency":"INR"}
+[2026-04-03T05:33:35.567Z] {"event":"CART_TOTALS","totalGrams":100,"totalKg":"0.100","lineItemTotalPrice":0,"totalPrice":0,"currency":"INR"}
+[2026-04-03T05:33:35.579Z] {"event":"DB_CANDIDATES","count":1,"rules":[{"name":"International","logic":"STANDARD_TIER","gid":"gid://shopify/DeliveryZone/433841537283"}]}
+[2026-04-03T05:33:35.585Z] {"event":"SCORE_CHECK","ruleName":"International","score":100,"destinationCountry":"CA","destinationProvince":"ON"}
+[2026-04-03T05:33:35.592Z] {"event":"MATCH_SUCCESS","ruleName":"International","logicType":"STANDARD_TIER","score":100}
+[2026-04-03T05:33:35.599Z] {"event":"RULES_PARSED","logicType":"STANDARD_TIER","rules":{"0":{"min":0,"max":null,"rate":0,"min_kg":"1"},"flat_rate":"100"}}
+[2026-04-03T05:33:35.608Z] {"event":"RATE_CALCULATED","calculatedRate":100,"serviceName":"Standard Shipping","serviceCode":"standard_tier","description":"","totalKg":0.1,"totalPrice":0}
+[2026-04-03T05:33:35.614Z] {"event":"RESPONSE_SENT","rates":[{"service_name":"Standard Shipping","service_code":"standard_tier","total_price":"10000","currency":"INR","description":"","min_delivery_date":"","max_delivery_date":""}]}
+[2026-04-03T05:33:36.066Z] === INCOMING CARRIER REQUEST ===
+[2026-04-03T05:33:36.069Z] {"event":"HMAC_DEBUG","hmacMatch":true,"secretLoaded":true,"hmacHeader":"Yctxs91pw3dA+7o4pUtyNZo0XkaklEW+vEBfwYYTXYY=","generatedHmac":"Yctxs91pw3dA+7o4pUtyNZo0XkaklEW+vEBfwYYTXYY="}
+[2026-04-03T05:33:36.074Z] HMAC verification PASSED
+[2026-04-03T05:33:36.078Z] {"event":"REQUEST_PARSED","shop":"zofonix-test.myshopify.com","destination":{"country":"DE","province":null,"city":"rate test"},"itemCount":1,"items":[{"name":"","grams":100,"quantity":1,"price":0}],"currency":"INR"}
+[2026-04-03T05:33:36.086Z] {"event":"CART_TOTALS","totalGrams":100,"totalKg":"0.100","lineItemTotalPrice":0,"totalPrice":0,"currency":"INR"}
+[2026-04-03T05:33:36.096Z] {"event":"DB_CANDIDATES","count":1,"rules":[{"name":"International","logic":"STANDARD_TIER","gid":"gid://shopify/DeliveryZone/433841537283"}]}
+[2026-04-03T05:33:36.103Z] {"event":"SCORE_CHECK","ruleName":"International","score":60,"destinationCountry":"DE","destinationProvince":""}
+[2026-04-03T05:33:36.109Z] {"event":"MATCH_SUCCESS","ruleName":"International","logicType":"STANDARD_TIER","score":60}
+[2026-04-03T05:33:36.116Z] {"event":"RULES_PARSED","logicType":"STANDARD_TIER","rules":{"0":{"min":0,"max":null,"rate":0,"min_kg":"1"},"flat_rate":"100"}}
+[2026-04-03T05:33:36.123Z] {"event":"RATE_CALCULATED","calculatedRate":100,"serviceName":"Standard Shipping","serviceCode":"standard_tier","description":"","totalKg":0.1,"totalPrice":0}
+[2026-04-03T05:33:36.134Z] {"event":"RESPONSE_SENT","rates":[{"service_name":"Standard Shipping","service_code":"standard_tier","total_price":"10000","currency":"INR","description":"","min_delivery_date":"","max_delivery_date":""}]}
+[2026-04-03T05:33:36.618Z] === INCOMING CARRIER REQUEST ===
+[2026-04-03T05:33:36.620Z] {"event":"HMAC_DEBUG","hmacMatch":true,"secretLoaded":true,"hmacHeader":"Jp2YIqcgVx2QKTs65BFwR5Js/lQmsoTsRwZEbl+x2QE=","generatedHmac":"Jp2YIqcgVx2QKTs65BFwR5Js/lQmsoTsRwZEbl+x2QE="}
+[2026-04-03T05:33:36.624Z] HMAC verification PASSED
+[2026-04-03T05:33:36.631Z] {"event":"REQUEST_PARSED","shop":"zofonix-test.myshopify.com","destination":{"country":"FR","province":null,"city":"rate test"},"itemCount":1,"items":[{"name":"","grams":100,"quantity":1,"price":0}],"currency":"INR"}
+[2026-04-03T05:33:36.644Z] {"event":"CART_TOTALS","totalGrams":100,"totalKg":"0.100","lineItemTotalPrice":0,"totalPrice":0,"currency":"INR"}
+[2026-04-03T05:33:36.659Z] {"event":"DB_CANDIDATES","count":1,"rules":[{"name":"International","logic":"STANDARD_TIER","gid":"gid://shopify/DeliveryZone/433841537283"}]}
+[2026-04-03T05:33:36.664Z] {"event":"SCORE_CHECK","ruleName":"International","score":60,"destinationCountry":"FR","destinationProvince":""}
+[2026-04-03T05:33:36.671Z] {"event":"MATCH_SUCCESS","ruleName":"International","logicType":"STANDARD_TIER","score":60}
+[2026-04-03T05:33:36.677Z] {"event":"RULES_PARSED","logicType":"STANDARD_TIER","rules":{"0":{"min":0,"max":null,"rate":0,"min_kg":"1"},"flat_rate":"100"}}
+[2026-04-03T05:33:36.689Z] {"event":"RATE_CALCULATED","calculatedRate":100,"serviceName":"Standard Shipping","serviceCode":"standard_tier","description":"","totalKg":0.1,"totalPrice":0}
+[2026-04-03T05:33:36.697Z] {"event":"RESPONSE_SENT","rates":[{"service_name":"Standard Shipping","service_code":"standard_tier","total_price":"10000","currency":"INR","description":"","min_delivery_date":"","max_delivery_date":""}]}
+[2026-04-03T05:33:37.149Z] === INCOMING CARRIER REQUEST ===
+[2026-04-03T05:33:37.151Z] {"event":"HMAC_DEBUG","hmacMatch":true,"secretLoaded":true,"hmacHeader":"UFJ9G49BYfTRXpgcohcachE9KpMQgf52ZWeGCyfXIHI=","generatedHmac":"UFJ9G49BYfTRXpgcohcachE9KpMQgf52ZWeGCyfXIHI="}
+[2026-04-03T05:33:37.159Z] HMAC verification PASSED
+[2026-04-03T05:33:37.178Z] {"event":"REQUEST_PARSED","shop":"zofonix-test.myshopify.com","destination":{"country":"GB","province":null,"city":"rate test"},"itemCount":1,"items":[{"name":"","grams":100,"quantity":1,"price":0}],"currency":"INR"}
+[2026-04-03T05:33:37.187Z] {"event":"CART_TOTALS","totalGrams":100,"totalKg":"0.100","lineItemTotalPrice":0,"totalPrice":0,"currency":"INR"}
+[2026-04-03T05:33:37.201Z] {"event":"DB_CANDIDATES","count":1,"rules":[{"name":"International","logic":"STANDARD_TIER","gid":"gid://shopify/DeliveryZone/433841537283"}]}
+[2026-04-03T05:33:37.208Z] {"event":"SCORE_CHECK","ruleName":"International","score":50,"destinationCountry":"GB","destinationProvince":""}
+[2026-04-03T05:33:37.214Z] {"event":"MATCH_SUCCESS","ruleName":"International","logicType":"STANDARD_TIER","score":50}
+[2026-04-03T05:33:37.220Z] {"event":"RULES_PARSED","logicType":"STANDARD_TIER","rules":{"0":{"min":0,"max":null,"rate":0,"min_kg":"1"},"flat_rate":"100"}}
+[2026-04-03T05:33:37.227Z] {"event":"RATE_CALCULATED","calculatedRate":100,"serviceName":"Standard Shipping","serviceCode":"standard_tier","description":"","totalKg":0.1,"totalPrice":0}
+[2026-04-03T05:33:37.234Z] {"event":"RESPONSE_SENT","rates":[{"service_name":"Standard Shipping","service_code":"standard_tier","total_price":"10000","currency":"INR","description":"","min_delivery_date":"","max_delivery_date":""}]}
+[2026-04-03T05:33:37.669Z] === INCOMING CARRIER REQUEST ===
+[2026-04-03T05:33:37.672Z] {"event":"HMAC_DEBUG","hmacMatch":true,"secretLoaded":true,"hmacHeader":"a/nNllBPMDmxbu0y9pemgVOp7NaJBk0AUv9KwI4nwvw=","generatedHmac":"a/nNllBPMDmxbu0y9pemgVOp7NaJBk0AUv9KwI4nwvw="}
+[2026-04-03T05:33:37.677Z] HMAC verification PASSED
+[2026-04-03T05:33:37.682Z] {"event":"REQUEST_PARSED","shop":"zofonix-test.myshopify.com","destination":{"country":"IT","province":null,"city":"rate test"},"itemCount":1,"items":[{"name":"","grams":100,"quantity":1,"price":0}],"currency":"INR"}
+[2026-04-03T05:33:37.688Z] {"event":"CART_TOTALS","totalGrams":100,"totalKg":"0.100","lineItemTotalPrice":0,"totalPrice":0,"currency":"INR"}
+[2026-04-03T05:33:37.699Z] {"event":"DB_CANDIDATES","count":1,"rules":[{"name":"International","logic":"STANDARD_TIER","gid":"gid://shopify/DeliveryZone/433841537283"}]}
+[2026-04-03T05:33:37.704Z] {"event":"SCORE_CHECK","ruleName":"International","score":50,"destinationCountry":"IT","destinationProvince":""}
+[2026-04-03T05:33:37.710Z] {"event":"MATCH_SUCCESS","ruleName":"International","logicType":"STANDARD_TIER","score":50}
+[2026-04-03T05:33:37.719Z] {"event":"RULES_PARSED","logicType":"STANDARD_TIER","rules":{"0":{"min":0,"max":null,"rate":0,"min_kg":"1"},"flat_rate":"100"}}
+[2026-04-03T05:33:37.727Z] {"event":"RATE_CALCULATED","calculatedRate":100,"serviceName":"Standard Shipping","serviceCode":"standard_tier","description":"","totalKg":0.1,"totalPrice":0}
+[2026-04-03T05:33:37.736Z] {"event":"RESPONSE_SENT","rates":[{"service_name":"Standard Shipping","service_code":"standard_tier","total_price":"10000","currency":"INR","description":"","min_delivery_date":"","max_delivery_date":""}]}
+[2026-04-03T05:33:38.253Z] === INCOMING CARRIER REQUEST ===
+[2026-04-03T05:33:38.255Z] {"event":"HMAC_DEBUG","hmacMatch":true,"secretLoaded":true,"hmacHeader":"9JQKX+94NXD2H0u++HqY/cL24BU9capADTrITGPg5Uc=","generatedHmac":"9JQKX+94NXD2H0u++HqY/cL24BU9capADTrITGPg5Uc="}
+[2026-04-03T05:33:38.262Z] HMAC verification PASSED
+[2026-04-03T05:33:38.273Z] {"event":"REQUEST_PARSED","shop":"zofonix-test.myshopify.com","destination":{"country":"JP","province":null,"city":"rate test"},"itemCount":1,"items":[{"name":"","grams":100,"quantity":1,"price":0}],"currency":"INR"}
+[2026-04-03T05:33:38.281Z] {"event":"CART_TOTALS","totalGrams":100,"totalKg":"0.100","lineItemTotalPrice":0,"totalPrice":0,"currency":"INR"}
+[2026-04-03T05:33:38.302Z] {"event":"DB_CANDIDATES","count":1,"rules":[{"name":"International","logic":"STANDARD_TIER","gid":"gid://shopify/DeliveryZone/433841537283"}]}
+[2026-04-03T05:33:38.309Z] {"event":"SCORE_CHECK","ruleName":"International","score":50,"destinationCountry":"JP","destinationProvince":""}
+[2026-04-03T05:33:38.315Z] {"event":"MATCH_SUCCESS","ruleName":"International","logicType":"STANDARD_TIER","score":50}
+[2026-04-03T05:33:38.327Z] {"event":"RULES_PARSED","logicType":"STANDARD_TIER","rules":{"0":{"min":0,"max":null,"rate":0,"min_kg":"1"},"flat_rate":"100"}}
+[2026-04-03T05:33:38.338Z] {"event":"RATE_CALCULATED","calculatedRate":100,"serviceName":"Standard Shipping","serviceCode":"standard_tier","description":"","totalKg":0.1,"totalPrice":0}
+[2026-04-03T05:33:38.345Z] {"event":"RESPONSE_SENT","rates":[{"service_name":"Standard Shipping","service_code":"standard_tier","total_price":"10000","currency":"INR","description":"","min_delivery_date":"","max_delivery_date":""}]}
+[2026-04-03T05:33:38.811Z] === INCOMING CARRIER REQUEST ===
+[2026-04-03T05:33:38.814Z] {"event":"HMAC_DEBUG","hmacMatch":true,"secretLoaded":true,"hmacHeader":"kM16K0ATJ70Tw0SiEGIJxwPJuT1FGqwqWm0Qn+nnm/8=","generatedHmac":"kM16K0ATJ70Tw0SiEGIJxwPJuT1FGqwqWm0Qn+nnm/8="}
+[2026-04-03T05:33:38.821Z] HMAC verification PASSED
+[2026-04-03T05:33:38.828Z] {"event":"REQUEST_PARSED","shop":"zofonix-test.myshopify.com","destination":{"country":"US","province":"CA","city":"rate test"},"itemCount":1,"items":[{"name":"","grams":100,"quantity":1,"price":0}],"currency":"INR"}
+[2026-04-03T05:33:38.835Z] {"event":"CART_TOTALS","totalGrams":100,"totalKg":"0.100","lineItemTotalPrice":0,"totalPrice":0,"currency":"INR"}
+[2026-04-03T05:33:38.847Z] {"event":"DB_CANDIDATES","count":1,"rules":[{"name":"International","logic":"STANDARD_TIER","gid":"gid://shopify/DeliveryZone/433841537283"}]}
+[2026-04-03T05:33:38.854Z] {"event":"SCORE_CHECK","ruleName":"International","score":100,"destinationCountry":"US","destinationProvince":"CA"}
+[2026-04-03T05:33:38.863Z] {"event":"MATCH_SUCCESS","ruleName":"International","logicType":"STANDARD_TIER","score":100}
+[2026-04-03T05:33:38.872Z] {"event":"RULES_PARSED","logicType":"STANDARD_TIER","rules":{"0":{"min":0,"max":null,"rate":0,"min_kg":"1"},"flat_rate":"100"}}
+[2026-04-03T05:33:38.880Z] {"event":"RATE_CALCULATED","calculatedRate":100,"serviceName":"Standard Shipping","serviceCode":"standard_tier","description":"","totalKg":0.1,"totalPrice":0}
+[2026-04-03T05:33:38.887Z] {"event":"RESPONSE_SENT","rates":[{"service_name":"Standard Shipping","service_code":"standard_tier","total_price":"10000","currency":"INR","description":"","min_delivery_date":"","max_delivery_date":""}]}
+[2026-04-03T05:33:39.334Z] === INCOMING CARRIER REQUEST ===
+[2026-04-03T05:33:39.336Z] {"event":"HMAC_DEBUG","hmacMatch":true,"secretLoaded":true,"hmacHeader":"e5KhLV65dGSgf/2aAXjxASen4uQxdE24EHGIFRMubzQ=","generatedHmac":"e5KhLV65dGSgf/2aAXjxASen4uQxdE24EHGIFRMubzQ="}
+[2026-04-03T05:33:39.342Z] HMAC verification PASSED
+[2026-04-03T05:33:39.353Z] {"event":"REQUEST_PARSED","shop":"zofonix-test.myshopify.com","destination":{"country":"AE","province":null,"city":"rate test"},"itemCount":1,"items":[{"name":"","grams":100,"quantity":1,"price":0}],"currency":"INR"}
+[2026-04-03T05:33:39.364Z] {"event":"CART_TOTALS","totalGrams":100,"totalKg":"0.100","lineItemTotalPrice":0,"totalPrice":0,"currency":"INR"}
+[2026-04-03T05:33:39.376Z] {"event":"DB_CANDIDATES","count":1,"rules":[{"name":"International","logic":"STANDARD_TIER","gid":"gid://shopify/DeliveryZone/433841537283"}]}
+[2026-04-03T05:33:39.384Z] {"event":"SCORE_CHECK","ruleName":"International","score":50,"destinationCountry":"AE","destinationProvince":""}
+[2026-04-03T05:33:39.392Z] {"event":"MATCH_SUCCESS","ruleName":"International","logicType":"STANDARD_TIER","score":50}
+[2026-04-03T05:33:39.404Z] {"event":"RULES_PARSED","logicType":"STANDARD_TIER","rules":{"0":{"min":0,"max":null,"rate":0,"min_kg":"1"},"flat_rate":"100"}}
+[2026-04-03T05:33:39.411Z] {"event":"RATE_CALCULATED","calculatedRate":100,"serviceName":"Standard Shipping","serviceCode":"standard_tier","description":"","totalKg":0.1,"totalPrice":0}
+[2026-04-03T05:33:39.418Z] {"event":"RESPONSE_SENT","rates":[{"service_name":"Standard Shipping","service_code":"standard_tier","total_price":"10000","currency":"INR","description":"","min_delivery_date":"","max_delivery_date":""}]}
+[2026-04-03T05:33:39.857Z] === INCOMING CARRIER REQUEST ===
+[2026-04-03T05:33:39.859Z] {"event":"HMAC_DEBUG","hmacMatch":true,"secretLoaded":true,"hmacHeader":"E2y59zVULW5/0xA2ptGY8+itwSEoUI9M+nuxIaz6Ka4=","generatedHmac":"E2y59zVULW5/0xA2ptGY8+itwSEoUI9M+nuxIaz6Ka4="}
+[2026-04-03T05:33:39.864Z] HMAC verification PASSED
+[2026-04-03T05:33:39.870Z] {"event":"REQUEST_PARSED","shop":"zofonix-test.myshopify.com","destination":{"country":"AT","province":null,"city":"rate test"},"itemCount":1,"items":[{"name":"","grams":100,"quantity":1,"price":0}],"currency":"INR"}
+[2026-04-03T05:33:39.877Z] {"event":"CART_TOTALS","totalGrams":100,"totalKg":"0.100","lineItemTotalPrice":0,"totalPrice":0,"currency":"INR"}
+[2026-04-03T05:33:39.889Z] {"event":"DB_CANDIDATES","count":1,"rules":[{"name":"International","logic":"STANDARD_TIER","gid":"gid://shopify/DeliveryZone/433841537283"}]}
+[2026-04-03T05:33:39.896Z] {"event":"SCORE_CHECK","ruleName":"International","score":60,"destinationCountry":"AT","destinationProvince":""}
+[2026-04-03T05:33:39.902Z] {"event":"MATCH_SUCCESS","ruleName":"International","logicType":"STANDARD_TIER","score":60}
+[2026-04-03T05:33:39.908Z] {"event":"RULES_PARSED","logicType":"STANDARD_TIER","rules":{"0":{"min":0,"max":null,"rate":0,"min_kg":"1"},"flat_rate":"100"}}
+[2026-04-03T05:33:39.914Z] {"event":"RATE_CALCULATED","calculatedRate":100,"serviceName":"Standard Shipping","serviceCode":"standard_tier","description":"","totalKg":0.1,"totalPrice":0}
+[2026-04-03T05:33:39.921Z] {"event":"RESPONSE_SENT","rates":[{"service_name":"Standard Shipping","service_code":"standard_tier","total_price":"10000","currency":"INR","description":"","min_delivery_date":"","max_delivery_date":""}]}
+[2026-04-03T15:48:06.499Z] === INCOMING CARRIER REQUEST ===
+[2026-04-03T15:48:06.508Z] {"event":"HMAC_DEBUG","hmacMatch":true,"secretLoaded":true,"hmacHeader":"sjInWpTU/or7zRnkWb+PBQS7XSNXE7gzmUlw2LZu1kE=","generatedHmac":"sjInWpTU/or7zRnkWb+PBQS7XSNXE7gzmUlw2LZu1kE="}
+[2026-04-03T15:48:06.530Z] HMAC verification PASSED
+[2026-04-03T15:48:06.552Z] {"event":"REQUEST_PARSED","shop":"zofonix-test.myshopify.com","destination":{"country":"IN","province":"TN","city":"Salem"},"itemCount":1,"items":[{"name":"The Collection Snowboard: Liquid","grams":0,"quantity":1,"price":74995}],"currency":"INR"}
+[2026-04-03T15:48:06.578Z] {"event":"CART_TOTALS","totalGrams":0,"totalKg":"0.000","lineItemTotalPrice":74995,"totalPrice":749.95,"currency":"INR"}
+[2026-04-03T15:48:06.659Z] {"event":"DB_CANDIDATES","count":2,"rules":[{"name":"International","logic":"STANDARD_TIER","gid":"gid://shopify/DeliveryZone/433841537283"},{"name":"Domestic","logic":"PRICE_MULTIPLIER","gid":"gid://shopify/DeliveryZone/433841471747"}]}
+[2026-04-03T15:48:06.665Z] {"event":"SCORE_CHECK","ruleName":"International","score":-1,"destinationCountry":"IN","destinationProvince":"TN"}
+[2026-04-03T15:48:06.798Z] {"event":"SCORE_CHECK","ruleName":"Domestic","score":100,"destinationCountry":"IN","destinationProvince":"TN"}
+[2026-04-03T15:48:06.834Z] {"event":"MATCH_SUCCESS","ruleName":"Domestic","logicType":"PRICE_MULTIPLIER","score":100}
+[2026-04-03T15:48:06.864Z] {"event":"RULES_PARSED","logicType":"PRICE_MULTIPLIER","rules":{"0":{"min":0,"max":null,"rate":"10","min_kg":"10","max_kg":"100"},"rate_per_kg":"10","percentage":"0.1"}}
+[2026-04-03T15:48:06.985Z] {"event":"RATE_CALCULATED","calculatedRate":74.995,"serviceName":"Calculated Shipping","serviceCode":"price_multiplier","description":"10.0% of order value","totalKg":0,"totalPrice":749.95}
+[2026-04-03T15:48:07.003Z] {"event":"RESPONSE_SENT","rates":[{"service_name":"Calculated Shipping","service_code":"price_multiplier","total_price":"7500","currency":"INR","description":"10.0% of order value","min_delivery_date":"","max_delivery_date":""}]}
+[2026-04-03T15:48:53.146Z] === INCOMING CARRIER REQUEST ===
+[2026-04-03T15:48:53.221Z] {"event":"HMAC_DEBUG","hmacMatch":true,"secretLoaded":true,"hmacHeader":"wblVeAfO2QSIPfWFOBon1MtGxYKZkhwMuiQIfMS9EfQ=","generatedHmac":"wblVeAfO2QSIPfWFOBon1MtGxYKZkhwMuiQIfMS9EfQ="}
+[2026-04-03T15:48:53.312Z] HMAC verification PASSED
+[2026-04-03T15:48:53.450Z] {"event":"REQUEST_PARSED","shop":"zofonix-test.myshopify.com","destination":{"country":"IN","province":"TN","city":"Salem"},"itemCount":1,"items":[{"name":"The Collection Snowboard: Liquid","grams":0,"quantity":1,"price":74995}],"currency":"INR"}
+[2026-04-03T15:48:53.605Z] {"event":"CART_TOTALS","totalGrams":0,"totalKg":"0.000","lineItemTotalPrice":74995,"totalPrice":749.95,"currency":"INR"}
+[2026-04-03T15:48:53.723Z] {"event":"DB_CANDIDATES","count":2,"rules":[{"name":"International","logic":"STANDARD_TIER","gid":"gid://shopify/DeliveryZone/433841537283"},{"name":"Domestic","logic":"WEIGHT_MULTIPLIER","gid":"gid://shopify/DeliveryZone/433841471747"}]}
+[2026-04-03T15:48:53.849Z] {"event":"SCORE_CHECK","ruleName":"International","score":-1,"destinationCountry":"IN","destinationProvince":"TN"}
+[2026-04-03T15:48:53.882Z] {"event":"SCORE_CHECK","ruleName":"Domestic","score":100,"destinationCountry":"IN","destinationProvince":"TN"}
+[2026-04-03T15:48:53.999Z] {"event":"MATCH_SUCCESS","ruleName":"Domestic","logicType":"WEIGHT_MULTIPLIER","score":100}
+[2026-04-03T15:48:54.029Z] {"event":"RULES_PARSED","logicType":"WEIGHT_MULTIPLIER","rules":{"0":{"min":0,"max":null,"rate":"10","min_kg":"10","max_kg":"100"},"rate_per_kg":"10","percentage":"0.1"}}
+[2026-04-03T15:48:54.047Z] {"event":"RATE_CALCULATED","calculatedRate":0,"serviceName":"Per KG Dynamic Shipping","serviceCode":"weight_multiplier","description":"0.00kg × ₹10/kg","totalKg":0,"totalPrice":749.95}
+[2026-04-03T15:48:54.078Z] {"event":"RESPONSE_SENT","rates":[{"service_name":"Per KG Dynamic Shipping","service_code":"weight_multiplier","total_price":"0","currency":"INR","description":"0.00kg × ₹10/kg","min_delivery_date":"","max_delivery_date":""}]}
+[2026-04-03T15:49:51.321Z] === INCOMING CARRIER REQUEST ===
+[2026-04-03T15:49:51.335Z] {"event":"HMAC_DEBUG","hmacMatch":true,"secretLoaded":true,"hmacHeader":"W+65wt6cGd48H+b/QJY2YbRIyLyjVFsrc+vPcuGxx4A=","generatedHmac":"W+65wt6cGd48H+b/QJY2YbRIyLyjVFsrc+vPcuGxx4A="}
+[2026-04-03T15:49:51.364Z] HMAC verification PASSED
+[2026-04-03T15:49:51.390Z] {"event":"REQUEST_PARSED","shop":"zofonix-test.myshopify.com","destination":{"country":"IN","province":"TN","city":"Coimbatore"},"itemCount":1,"items":[{"name":"The Collection Snowboard: Liquid","grams":0,"quantity":1,"price":74995}],"currency":"INR"}
+[2026-04-03T15:49:51.421Z] {"event":"CART_TOTALS","totalGrams":0,"totalKg":"0.000","lineItemTotalPrice":74995,"totalPrice":749.95,"currency":"INR"}
+[2026-04-03T15:49:51.460Z] {"event":"DB_CANDIDATES","count":2,"rules":[{"name":"International","logic":"STANDARD_TIER","gid":"gid://shopify/DeliveryZone/433841537283"},{"name":"Domestic","logic":"WEIGHT_MULTIPLIER","gid":"gid://shopify/DeliveryZone/433841471747"}]}
+[2026-04-03T15:49:51.478Z] {"event":"SCORE_CHECK","ruleName":"International","score":-1,"destinationCountry":"IN","destinationProvince":"TN"}
+[2026-04-03T15:49:51.499Z] {"event":"SCORE_CHECK","ruleName":"Domestic","score":100,"destinationCountry":"IN","destinationProvince":"TN"}
+[2026-04-03T15:49:51.518Z] {"event":"MATCH_SUCCESS","ruleName":"Domestic","logicType":"WEIGHT_MULTIPLIER","score":100}
+[2026-04-03T15:49:51.536Z] {"event":"RULES_PARSED","logicType":"WEIGHT_MULTIPLIER","rules":{"0":{"min":0,"max":null,"rate":"10","min_kg":"10","max_kg":"100"},"rate_per_kg":"10","percentage":"0.1"}}
+[2026-04-03T15:49:51.564Z] {"event":"RATE_CALCULATED","calculatedRate":0,"serviceName":"Per KG Dynamic Shipping","serviceCode":"weight_multiplier","description":"0.00kg × ₹10/kg","totalKg":0,"totalPrice":749.95}
+[2026-04-03T15:49:51.608Z] {"event":"RESPONSE_SENT","rates":[{"service_name":"Per KG Dynamic Shipping","service_code":"weight_multiplier","total_price":"0","currency":"INR","description":"0.00kg × ₹10/kg","min_delivery_date":"","max_delivery_date":""}]}
+[2026-04-03T15:50:07.059Z] === INCOMING CARRIER REQUEST ===
+[2026-04-03T15:50:07.066Z] {"event":"HMAC_DEBUG","hmacMatch":true,"secretLoaded":true,"hmacHeader":"4e7RR8su4kio4H+45Ems9wzoyBJEfrk4iTiO7hPPaD0=","generatedHmac":"4e7RR8su4kio4H+45Ems9wzoyBJEfrk4iTiO7hPPaD0="}
+[2026-04-03T15:50:07.085Z] HMAC verification PASSED
+[2026-04-03T15:50:07.118Z] {"event":"REQUEST_PARSED","shop":"zofonix-test.myshopify.com","destination":{"country":"IN","province":"TN","city":"Salem"},"itemCount":1,"items":[{"name":"The Collection Snowboard: Liquid","grams":0,"quantity":1,"price":74995}],"currency":"INR"}
+[2026-04-03T15:50:07.141Z] {"event":"CART_TOTALS","totalGrams":0,"totalKg":"0.000","lineItemTotalPrice":74995,"totalPrice":749.95,"currency":"INR"}
+[2026-04-03T15:50:07.183Z] {"event":"DB_CANDIDATES","count":2,"rules":[{"name":"International","logic":"STANDARD_TIER","gid":"gid://shopify/DeliveryZone/433841537283"},{"name":"Domestic","logic":"WEIGHT_MULTIPLIER","gid":"gid://shopify/DeliveryZone/433841471747"}]}
+[2026-04-03T15:50:07.204Z] {"event":"SCORE_CHECK","ruleName":"International","score":-1,"destinationCountry":"IN","destinationProvince":"TN"}
+[2026-04-03T15:50:07.226Z] {"event":"SCORE_CHECK","ruleName":"Domestic","score":100,"destinationCountry":"IN","destinationProvince":"TN"}
+[2026-04-03T15:50:07.254Z] {"event":"MATCH_SUCCESS","ruleName":"Domestic","logicType":"WEIGHT_MULTIPLIER","score":100}
+[2026-04-03T15:50:07.273Z] {"event":"RULES_PARSED","logicType":"WEIGHT_MULTIPLIER","rules":{"0":{"min":0,"max":null,"rate":"10","min_kg":"10","max_kg":"100"},"rate_per_kg":"10","percentage":"0.1"}}
+[2026-04-03T15:50:07.301Z] {"event":"RATE_CALCULATED","calculatedRate":0,"serviceName":"Per KG Dynamic Shipping","serviceCode":"weight_multiplier","description":"0.00kg × ₹10/kg","totalKg":0,"totalPrice":749.95}
+[2026-04-03T15:50:07.329Z] {"event":"RESPONSE_SENT","rates":[{"service_name":"Per KG Dynamic Shipping","service_code":"weight_multiplier","total_price":"0","currency":"INR","description":"0.00kg × ₹10/kg","min_delivery_date":"","max_delivery_date":""}]}
+[2026-04-03T15:50:35.709Z] === INCOMING CARRIER REQUEST ===
+[2026-04-03T15:50:35.789Z] {"event":"HMAC_DEBUG","hmacMatch":true,"secretLoaded":true,"hmacHeader":"ClksnCfkGlP79F/whxjE4q7eGmTjuj9gsrNJFpgCHLM=","generatedHmac":"ClksnCfkGlP79F/whxjE4q7eGmTjuj9gsrNJFpgCHLM="}
+[2026-04-03T15:50:36.026Z] HMAC verification PASSED
+[2026-04-03T15:50:36.193Z] {"event":"REQUEST_PARSED","shop":"zofonix-test.myshopify.com","destination":{"country":"IN","province":"TN","city":"Coimbatore"},"itemCount":1,"items":[{"name":"The Collection Snowboard: Liquid","grams":0,"quantity":1,"price":74995}],"currency":"INR"}
+[2026-04-03T15:50:36.442Z] {"event":"CART_TOTALS","totalGrams":0,"totalKg":"0.000","lineItemTotalPrice":74995,"totalPrice":749.95,"currency":"INR"}
+[2026-04-03T15:50:37.503Z] {"event":"DB_CANDIDATES","count":2,"rules":[{"name":"International","logic":"STANDARD_TIER","gid":"gid://shopify/DeliveryZone/433841537283"},{"name":"Domestic","logic":"WEIGHT_MULTIPLIER","gid":"gid://shopify/DeliveryZone/433841471747"}]}
+[2026-04-03T15:50:37.571Z] {"event":"SCORE_CHECK","ruleName":"International","score":-1,"destinationCountry":"IN","destinationProvince":"TN"}
+[2026-04-03T15:50:37.629Z] {"event":"SCORE_CHECK","ruleName":"Domestic","score":100,"destinationCountry":"IN","destinationProvince":"TN"}
+[2026-04-03T15:50:37.751Z] {"event":"MATCH_SUCCESS","ruleName":"Domestic","logicType":"WEIGHT_MULTIPLIER","score":100}
+[2026-04-03T15:50:38.230Z] {"event":"RULES_PARSED","logicType":"WEIGHT_MULTIPLIER","rules":{"0":{"min":0,"max":null,"rate":"10","min_kg":"10","max_kg":"100"},"rate_per_kg":"10","percentage":"0.1","min_charge":"10","max_charge":"20"}}
+[2026-04-03T15:50:38.464Z] {"event":"RATE_CALCULATED","calculatedRate":10,"serviceName":"Per KG Dynamic Shipping","serviceCode":"weight_multiplier","description":"0.00kg × ₹10/kg","totalKg":0,"totalPrice":749.95}
+[2026-04-03T15:50:38.503Z] {"event":"RESPONSE_SENT","rates":[{"service_name":"Per KG Dynamic Shipping","service_code":"weight_multiplier","total_price":"1000","currency":"INR","description":"0.00kg × ₹10/kg","min_delivery_date":"","max_delivery_date":""}]}
+[2026-04-03T15:51:36.062Z] === INCOMING CARRIER REQUEST ===
+[2026-04-03T15:51:36.077Z] {"event":"HMAC_DEBUG","hmacMatch":true,"secretLoaded":true,"hmacHeader":"NEXFOmq0rB2nHJAwnD4GUNaI732sNLjYXJWdDgwW5w0=","generatedHmac":"NEXFOmq0rB2nHJAwnD4GUNaI732sNLjYXJWdDgwW5w0="}
+[2026-04-03T15:51:36.116Z] HMAC verification PASSED
+[2026-04-03T15:51:36.188Z] {"event":"REQUEST_PARSED","shop":"zofonix-test.myshopify.com","destination":{"country":"IN","province":"TN","city":"Salem"},"itemCount":1,"items":[{"name":"The Collection Snowboard: Liquid","grams":0,"quantity":5,"price":74995}],"currency":"INR"}
+[2026-04-03T15:51:36.224Z] {"event":"CART_TOTALS","totalGrams":0,"totalKg":"0.000","lineItemTotalPrice":374975,"totalPrice":3749.75,"currency":"INR"}
+[2026-04-03T15:51:36.267Z] {"event":"DB_CANDIDATES","count":2,"rules":[{"name":"International","logic":"STANDARD_TIER","gid":"gid://shopify/DeliveryZone/433841537283"},{"name":"Domestic","logic":"WEIGHT_MULTIPLIER","gid":"gid://shopify/DeliveryZone/433841471747"}]}
+[2026-04-03T15:51:36.291Z] {"event":"SCORE_CHECK","ruleName":"International","score":-1,"destinationCountry":"IN","destinationProvince":"TN"}
+[2026-04-03T15:51:36.327Z] {"event":"SCORE_CHECK","ruleName":"Domestic","score":100,"destinationCountry":"IN","destinationProvince":"TN"}
+[2026-04-03T15:51:36.358Z] {"event":"MATCH_SUCCESS","ruleName":"Domestic","logicType":"WEIGHT_MULTIPLIER","score":100}
+[2026-04-03T15:51:36.379Z] {"event":"RULES_PARSED","logicType":"WEIGHT_MULTIPLIER","rules":{"0":{"min":0,"max":null,"rate":"10","min_kg":"10","max_kg":"100"},"rate_per_kg":"10","percentage":"0.1","min_charge":"10","max_charge":"20"}}
+[2026-04-03T15:51:36.406Z] {"event":"RATE_CALCULATED","calculatedRate":10,"serviceName":"Per KG Dynamic Shipping","serviceCode":"weight_multiplier","description":"0.00kg × ₹10/kg","totalKg":0,"totalPrice":3749.75}
+[2026-04-03T15:51:36.428Z] {"event":"RESPONSE_SENT","rates":[{"service_name":"Per KG Dynamic Shipping","service_code":"weight_multiplier","total_price":"1000","currency":"INR","description":"0.00kg × ₹10/kg","min_delivery_date":"","max_delivery_date":""}]}
+[2026-04-03T15:55:44.842Z] === INCOMING CARRIER REQUEST ===
+[2026-04-03T15:55:44.848Z] {"event":"HMAC_DEBUG","hmacMatch":true,"secretLoaded":true,"hmacHeader":"Is28Gi63iAUwU7I7oTsIRaNnVmI3NXTSndDi73lTFEQ=","generatedHmac":"Is28Gi63iAUwU7I7oTsIRaNnVmI3NXTSndDi73lTFEQ="}
+[2026-04-03T15:55:44.891Z] HMAC verification PASSED
+[2026-04-03T15:55:44.933Z] {"event":"REQUEST_PARSED","shop":"zofonix-test.myshopify.com","destination":{"country":"IN","province":"TN","city":"Coimbatore"},"itemCount":1,"items":[{"name":"The Multi-managed Snowboard","grams":5000,"quantity":1,"price":62995}],"currency":"INR"}
+[2026-04-03T15:55:44.958Z] {"event":"CART_TOTALS","totalGrams":5000,"totalKg":"5.000","lineItemTotalPrice":62995,"totalPrice":629.95,"currency":"INR"}
+[2026-04-03T15:55:44.999Z] {"event":"DB_CANDIDATES","count":2,"rules":[{"name":"International","logic":"STANDARD_TIER","gid":"gid://shopify/DeliveryZone/433841537283"},{"name":"Domestic","logic":"WEIGHT_MULTIPLIER","gid":"gid://shopify/DeliveryZone/433841471747"}]}
+[2026-04-03T15:55:45.017Z] {"event":"SCORE_CHECK","ruleName":"International","score":-1,"destinationCountry":"IN","destinationProvince":"TN"}
+[2026-04-03T15:55:45.038Z] {"event":"SCORE_CHECK","ruleName":"Domestic","score":100,"destinationCountry":"IN","destinationProvince":"TN"}
+[2026-04-03T15:55:45.060Z] {"event":"MATCH_SUCCESS","ruleName":"Domestic","logicType":"WEIGHT_MULTIPLIER","score":100}
+[2026-04-03T15:55:45.088Z] {"event":"RULES_PARSED","logicType":"WEIGHT_MULTIPLIER","rules":{"0":{"min":0,"max":null,"rate":"10","min_kg":"10","max_kg":"100"},"rate_per_kg":"10","percentage":"0.1","min_charge":"10","max_charge":"20"}}
+[2026-04-03T15:55:45.111Z] {"event":"RATE_CALCULATED","calculatedRate":20,"serviceName":"Per KG Dynamic Shipping","serviceCode":"weight_multiplier","description":"5.00kg × ₹10/kg","totalKg":5,"totalPrice":629.95}
+[2026-04-03T15:55:45.128Z] {"event":"RESPONSE_SENT","rates":[{"service_name":"Per KG Dynamic Shipping","service_code":"weight_multiplier","total_price":"2000","currency":"INR","description":"5.00kg × ₹10/kg","min_delivery_date":"","max_delivery_date":""}]}
+[2026-04-03T15:56:16.842Z] === INCOMING CARRIER REQUEST ===
+[2026-04-03T15:56:16.847Z] {"event":"HMAC_DEBUG","hmacMatch":true,"secretLoaded":true,"hmacHeader":"L87zwMAbWXKKZJd3kYBi+R0KzbgdT8bNuiyUGVtzy4w=","generatedHmac":"L87zwMAbWXKKZJd3kYBi+R0KzbgdT8bNuiyUGVtzy4w="}
+[2026-04-03T15:56:16.875Z] HMAC verification PASSED
+[2026-04-03T15:56:16.907Z] {"event":"REQUEST_PARSED","shop":"zofonix-test.myshopify.com","destination":{"country":"IN","province":"TN","city":"Salem"},"itemCount":1,"items":[{"name":"The Multi-managed Snowboard","grams":5000,"quantity":1,"price":62995}],"currency":"INR"}
+[2026-04-03T15:56:16.943Z] {"event":"CART_TOTALS","totalGrams":5000,"totalKg":"5.000","lineItemTotalPrice":62995,"totalPrice":629.95,"currency":"INR"}
+[2026-04-03T15:56:16.978Z] {"event":"DB_CANDIDATES","count":2,"rules":[{"name":"International","logic":"STANDARD_TIER","gid":"gid://shopify/DeliveryZone/433841537283"},{"name":"Domestic","logic":"WEIGHT_MULTIPLIER","gid":"gid://shopify/DeliveryZone/433841471747"}]}
+[2026-04-03T15:56:17.003Z] {"event":"SCORE_CHECK","ruleName":"International","score":-1,"destinationCountry":"IN","destinationProvince":"TN"}
+[2026-04-03T15:56:17.027Z] {"event":"SCORE_CHECK","ruleName":"Domestic","score":100,"destinationCountry":"IN","destinationProvince":"TN"}
+[2026-04-03T15:56:17.045Z] {"event":"MATCH_SUCCESS","ruleName":"Domestic","logicType":"WEIGHT_MULTIPLIER","score":100}
+[2026-04-03T15:56:17.095Z] {"event":"RULES_PARSED","logicType":"WEIGHT_MULTIPLIER","rules":{"0":{"min":0,"max":null,"rate":"10","min_kg":"10","max_kg":"100"},"rate_per_kg":"10","percentage":"0.1","min_charge":"","max_charge":null}}
+[2026-04-03T15:56:17.121Z] {"event":"RATE_CALCULATED","calculatedRate":50,"serviceName":"Per KG Dynamic Shipping","serviceCode":"weight_multiplier","description":"5.00kg × ₹10/kg","totalKg":5,"totalPrice":629.95}
+[2026-04-03T15:56:17.142Z] {"event":"RESPONSE_SENT","rates":[{"service_name":"Per KG Dynamic Shipping","service_code":"weight_multiplier","total_price":"5000","currency":"INR","description":"5.00kg × ₹10/kg","min_delivery_date":"","max_delivery_date":""}]}
+[2026-04-03T16:06:02.521Z] === INCOMING CARRIER REQUEST ===
+[2026-04-03T16:06:02.524Z] {"event":"HMAC_DEBUG","hmacMatch":true,"secretLoaded":true,"hmacHeader":"74MhCw5XSlkefBXSAwWOqHUs9BHokjKW+1AcBK7YUeo=","generatedHmac":"74MhCw5XSlkefBXSAwWOqHUs9BHokjKW+1AcBK7YUeo="}
+[2026-04-03T16:06:02.531Z] HMAC verification PASSED
+[2026-04-03T16:06:02.538Z] {"event":"REQUEST_PARSED","shop":"zofonix-test.myshopify.com","destination":{"country":"IN","province":"TN","city":"Chennai"},"itemCount":1,"items":[{"name":"The Multi-managed Snowboard","grams":5000,"quantity":1,"price":62995}],"currency":"INR"}
+[2026-04-03T16:06:02.544Z] {"event":"CART_TOTALS","totalGrams":5000,"totalKg":"5.000","lineItemTotalPrice":62995,"totalPrice":629.95,"currency":"INR"}
+[2026-04-03T16:06:02.561Z] {"event":"DB_CANDIDATES","count":2,"rules":[{"name":"International","logic":"STANDARD_TIER","gid":"gid://shopify/DeliveryZone/433841537283"},{"name":"Domestic","logic":"WEIGHT_MULTIPLIER","gid":"gid://shopify/DeliveryZone/433841471747"}]}
+[2026-04-03T16:06:02.567Z] {"event":"SCORE_CHECK","ruleName":"International","score":-1,"destinationCountry":"IN","destinationProvince":"TN"}
+[2026-04-03T16:06:02.573Z] {"event":"SCORE_CHECK","ruleName":"Domestic","score":100,"destinationCountry":"IN","destinationProvince":"TN"}
+[2026-04-03T16:06:02.580Z] {"event":"MATCH_SUCCESS","ruleName":"Domestic","logicType":"WEIGHT_MULTIPLIER","score":100}
+[2026-04-03T16:06:02.588Z] {"event":"RULES_PARSED","logicType":"WEIGHT_MULTIPLIER","rules":{"0":{"min":0,"max":null,"rate":"10","min_kg":"10","max_kg":"100"},"rate_per_kg":"10","percentage":"0.1","min_charge":"","max_charge":null}}
+[2026-04-03T16:06:02.595Z] {"event":"RATE_CALCULATED","calculatedRate":50,"serviceName":"Per KG Dynamic Shipping","serviceCode":"weight_multiplier","description":"5.00kg × ₹10/kg","totalKg":5,"totalPrice":629.95}
+[2026-04-03T16:06:02.601Z] {"event":"RESPONSE_SENT","rates":[{"service_name":"Per KG Dynamic Shipping","service_code":"weight_multiplier","total_price":"5000","currency":"INR","description":"5.00kg × ₹10/kg","min_delivery_date":"","max_delivery_date":""}]}
+[2026-04-03T16:08:56.099Z] === INCOMING CARRIER REQUEST ===
+[2026-04-03T16:08:56.104Z] {"event":"HMAC_DEBUG","hmacMatch":true,"secretLoaded":true,"hmacHeader":"3FcMQ/vf61Q2nVEJdvhH4shGbkncU+3LXtjj6h+fwjc=","generatedHmac":"3FcMQ/vf61Q2nVEJdvhH4shGbkncU+3LXtjj6h+fwjc="}
+[2026-04-03T16:08:56.115Z] HMAC verification PASSED
+[2026-04-03T16:08:56.127Z] {"event":"REQUEST_PARSED","shop":"zofonix-test.myshopify.com","destination":{"country":"AU","province":null,"city":"rate test"},"itemCount":1,"items":[{"name":"","grams":100,"quantity":1,"price":0}],"currency":"INR"}
+[2026-04-03T16:08:56.135Z] {"event":"CART_TOTALS","totalGrams":100,"totalKg":"0.100","lineItemTotalPrice":0,"totalPrice":0,"currency":"INR"}
+[2026-04-03T16:08:56.162Z] {"event":"DB_CANDIDATES","count":1,"rules":[{"name":"International","logic":"STANDARD_TIER","gid":"gid://shopify/DeliveryZone/433841537283"}]}
+[2026-04-03T16:08:56.171Z] {"event":"SCORE_CHECK","ruleName":"International","score":50,"destinationCountry":"AU","destinationProvince":""}
+[2026-04-03T16:08:56.181Z] {"event":"MATCH_SUCCESS","ruleName":"International","logicType":"STANDARD_TIER","score":50}
+[2026-04-03T16:08:56.191Z] {"event":"RULES_PARSED","logicType":"STANDARD_TIER","rules":{"0":{"min":0,"max":null,"rate":0,"min_kg":"1"},"flat_rate":"100"}}
+[2026-04-03T16:08:56.199Z] {"event":"RATE_CALCULATED","calculatedRate":100,"serviceName":"Standard Shipping","serviceCode":"standard_tier","description":"","totalKg":0.1,"totalPrice":0}
+[2026-04-03T16:08:56.212Z] {"event":"RESPONSE_SENT","rates":[{"service_name":"Standard Shipping","service_code":"standard_tier","total_price":"10000","currency":"INR","description":"","min_delivery_date":"","max_delivery_date":""}]}
+[2026-04-03T16:08:57.892Z] === INCOMING CARRIER REQUEST ===
+[2026-04-03T16:08:57.895Z] {"event":"HMAC_DEBUG","hmacMatch":true,"secretLoaded":true,"hmacHeader":"6dv9PW5jpDHXW7tmqUW/ZBBUqUKqISuNebdDTCU4eOM=","generatedHmac":"6dv9PW5jpDHXW7tmqUW/ZBBUqUKqISuNebdDTCU4eOM="}
+[2026-04-03T16:08:57.907Z] HMAC verification PASSED
+[2026-04-03T16:08:57.923Z] {"event":"REQUEST_PARSED","shop":"zofonix-test.myshopify.com","destination":{"country":"CA","province":"ON","city":"rate test"},"itemCount":1,"items":[{"name":"","grams":100,"quantity":1,"price":0}],"currency":"INR"}
+[2026-04-03T16:08:57.944Z] {"event":"CART_TOTALS","totalGrams":100,"totalKg":"0.100","lineItemTotalPrice":0,"totalPrice":0,"currency":"INR"}
+[2026-04-03T16:08:57.962Z] {"event":"DB_CANDIDATES","count":1,"rules":[{"name":"International","logic":"STANDARD_TIER","gid":"gid://shopify/DeliveryZone/433841537283"}]}
+[2026-04-03T16:08:57.967Z] {"event":"SCORE_CHECK","ruleName":"International","score":100,"destinationCountry":"CA","destinationProvince":"ON"}
+[2026-04-03T16:08:57.978Z] {"event":"MATCH_SUCCESS","ruleName":"International","logicType":"STANDARD_TIER","score":100}
+[2026-04-03T16:08:57.992Z] {"event":"RULES_PARSED","logicType":"STANDARD_TIER","rules":{"0":{"min":0,"max":null,"rate":0,"min_kg":"1"},"flat_rate":"100"}}
+[2026-04-03T16:08:58.002Z] {"event":"RATE_CALCULATED","calculatedRate":100,"serviceName":"Standard Shipping","serviceCode":"standard_tier","description":"","totalKg":0.1,"totalPrice":0}
+[2026-04-03T16:08:58.015Z] {"event":"RESPONSE_SENT","rates":[{"service_name":"Standard Shipping","service_code":"standard_tier","total_price":"10000","currency":"INR","description":"","min_delivery_date":"","max_delivery_date":""}]}
+[2026-04-03T16:08:58.650Z] === INCOMING CARRIER REQUEST ===
+[2026-04-03T16:08:58.652Z] {"event":"HMAC_DEBUG","hmacMatch":true,"secretLoaded":true,"hmacHeader":"Yctxs91pw3dA+7o4pUtyNZo0XkaklEW+vEBfwYYTXYY=","generatedHmac":"Yctxs91pw3dA+7o4pUtyNZo0XkaklEW+vEBfwYYTXYY="}
+[2026-04-03T16:08:58.673Z] HMAC verification PASSED
+[2026-04-03T16:08:58.681Z] {"event":"REQUEST_PARSED","shop":"zofonix-test.myshopify.com","destination":{"country":"DE","province":null,"city":"rate test"},"itemCount":1,"items":[{"name":"","grams":100,"quantity":1,"price":0}],"currency":"INR"}
+[2026-04-03T16:08:58.690Z] {"event":"CART_TOTALS","totalGrams":100,"totalKg":"0.100","lineItemTotalPrice":0,"totalPrice":0,"currency":"INR"}
+[2026-04-03T16:08:58.700Z] {"event":"DB_CANDIDATES","count":1,"rules":[{"name":"International","logic":"STANDARD_TIER","gid":"gid://shopify/DeliveryZone/433841537283"}]}
+[2026-04-03T16:08:58.707Z] {"event":"SCORE_CHECK","ruleName":"International","score":60,"destinationCountry":"DE","destinationProvince":""}
+[2026-04-03T16:08:58.714Z] {"event":"MATCH_SUCCESS","ruleName":"International","logicType":"STANDARD_TIER","score":60}
+[2026-04-03T16:08:58.721Z] {"event":"RULES_PARSED","logicType":"STANDARD_TIER","rules":{"0":{"min":0,"max":null,"rate":0,"min_kg":"1"},"flat_rate":"100"}}
+[2026-04-03T16:08:58.729Z] {"event":"RATE_CALCULATED","calculatedRate":100,"serviceName":"Standard Shipping","serviceCode":"standard_tier","description":"","totalKg":0.1,"totalPrice":0}
+[2026-04-03T16:08:58.735Z] {"event":"RESPONSE_SENT","rates":[{"service_name":"Standard Shipping","service_code":"standard_tier","total_price":"10000","currency":"INR","description":"","min_delivery_date":"","max_delivery_date":""}]}
+[2026-04-03T16:08:59.404Z] === INCOMING CARRIER REQUEST ===
+[2026-04-03T16:08:59.407Z] {"event":"HMAC_DEBUG","hmacMatch":true,"secretLoaded":true,"hmacHeader":"Jp2YIqcgVx2QKTs65BFwR5Js/lQmsoTsRwZEbl+x2QE=","generatedHmac":"Jp2YIqcgVx2QKTs65BFwR5Js/lQmsoTsRwZEbl+x2QE="}
+[2026-04-03T16:08:59.417Z] HMAC verification PASSED
+[2026-04-03T16:08:59.426Z] {"event":"REQUEST_PARSED","shop":"zofonix-test.myshopify.com","destination":{"country":"FR","province":null,"city":"rate test"},"itemCount":1,"items":[{"name":"","grams":100,"quantity":1,"price":0}],"currency":"INR"}
+[2026-04-03T16:08:59.433Z] {"event":"CART_TOTALS","totalGrams":100,"totalKg":"0.100","lineItemTotalPrice":0,"totalPrice":0,"currency":"INR"}
+[2026-04-03T16:08:59.444Z] {"event":"DB_CANDIDATES","count":1,"rules":[{"name":"International","logic":"STANDARD_TIER","gid":"gid://shopify/DeliveryZone/433841537283"}]}
+[2026-04-03T16:08:59.450Z] {"event":"SCORE_CHECK","ruleName":"International","score":60,"destinationCountry":"FR","destinationProvince":""}
+[2026-04-03T16:08:59.456Z] {"event":"MATCH_SUCCESS","ruleName":"International","logicType":"STANDARD_TIER","score":60}
+[2026-04-03T16:08:59.466Z] {"event":"RULES_PARSED","logicType":"STANDARD_TIER","rules":{"0":{"min":0,"max":null,"rate":0,"min_kg":"1"},"flat_rate":"100"}}
+[2026-04-03T16:08:59.477Z] {"event":"RATE_CALCULATED","calculatedRate":100,"serviceName":"Standard Shipping","serviceCode":"standard_tier","description":"","totalKg":0.1,"totalPrice":0}
+[2026-04-03T16:08:59.486Z] {"event":"RESPONSE_SENT","rates":[{"service_name":"Standard Shipping","service_code":"standard_tier","total_price":"10000","currency":"INR","description":"","min_delivery_date":"","max_delivery_date":""}]}
+[2026-04-03T16:09:00.130Z] === INCOMING CARRIER REQUEST ===
+[2026-04-03T16:09:00.132Z] {"event":"HMAC_DEBUG","hmacMatch":true,"secretLoaded":true,"hmacHeader":"UFJ9G49BYfTRXpgcohcachE9KpMQgf52ZWeGCyfXIHI=","generatedHmac":"UFJ9G49BYfTRXpgcohcachE9KpMQgf52ZWeGCyfXIHI="}
+[2026-04-03T16:09:00.154Z] HMAC verification PASSED
+[2026-04-03T16:09:00.169Z] {"event":"REQUEST_PARSED","shop":"zofonix-test.myshopify.com","destination":{"country":"GB","province":null,"city":"rate test"},"itemCount":1,"items":[{"name":"","grams":100,"quantity":1,"price":0}],"currency":"INR"}
+[2026-04-03T16:09:00.177Z] {"event":"CART_TOTALS","totalGrams":100,"totalKg":"0.100","lineItemTotalPrice":0,"totalPrice":0,"currency":"INR"}
+[2026-04-03T16:09:00.189Z] {"event":"DB_CANDIDATES","count":1,"rules":[{"name":"International","logic":"STANDARD_TIER","gid":"gid://shopify/DeliveryZone/433841537283"}]}
+[2026-04-03T16:09:00.195Z] {"event":"SCORE_CHECK","ruleName":"International","score":50,"destinationCountry":"GB","destinationProvince":""}
+[2026-04-03T16:09:00.201Z] {"event":"MATCH_SUCCESS","ruleName":"International","logicType":"STANDARD_TIER","score":50}
+[2026-04-03T16:09:00.208Z] {"event":"RULES_PARSED","logicType":"STANDARD_TIER","rules":{"0":{"min":0,"max":null,"rate":0,"min_kg":"1"},"flat_rate":"100"}}
+[2026-04-03T16:09:00.213Z] {"event":"RATE_CALCULATED","calculatedRate":100,"serviceName":"Standard Shipping","serviceCode":"standard_tier","description":"","totalKg":0.1,"totalPrice":0}
+[2026-04-03T16:09:00.218Z] {"event":"RESPONSE_SENT","rates":[{"service_name":"Standard Shipping","service_code":"standard_tier","total_price":"10000","currency":"INR","description":"","min_delivery_date":"","max_delivery_date":""}]}
+[2026-04-03T16:09:00.864Z] === INCOMING CARRIER REQUEST ===
+[2026-04-03T16:09:00.866Z] {"event":"HMAC_DEBUG","hmacMatch":true,"secretLoaded":true,"hmacHeader":"a/nNllBPMDmxbu0y9pemgVOp7NaJBk0AUv9KwI4nwvw=","generatedHmac":"a/nNllBPMDmxbu0y9pemgVOp7NaJBk0AUv9KwI4nwvw="}
+[2026-04-03T16:09:00.870Z] HMAC verification PASSED
+[2026-04-03T16:09:00.879Z] {"event":"REQUEST_PARSED","shop":"zofonix-test.myshopify.com","destination":{"country":"IT","province":null,"city":"rate test"},"itemCount":1,"items":[{"name":"","grams":100,"quantity":1,"price":0}],"currency":"INR"}
+[2026-04-03T16:09:00.887Z] {"event":"CART_TOTALS","totalGrams":100,"totalKg":"0.100","lineItemTotalPrice":0,"totalPrice":0,"currency":"INR"}
+[2026-04-03T16:09:00.909Z] {"event":"DB_CANDIDATES","count":1,"rules":[{"name":"International","logic":"STANDARD_TIER","gid":"gid://shopify/DeliveryZone/433841537283"}]}
+[2026-04-03T16:09:00.923Z] {"event":"SCORE_CHECK","ruleName":"International","score":50,"destinationCountry":"IT","destinationProvince":""}
+[2026-04-03T16:09:00.935Z] {"event":"MATCH_SUCCESS","ruleName":"International","logicType":"STANDARD_TIER","score":50}
+[2026-04-03T16:09:00.951Z] {"event":"RULES_PARSED","logicType":"STANDARD_TIER","rules":{"0":{"min":0,"max":null,"rate":0,"min_kg":"1"},"flat_rate":"100"}}
+[2026-04-03T16:09:00.960Z] {"event":"RATE_CALCULATED","calculatedRate":100,"serviceName":"Standard Shipping","serviceCode":"standard_tier","description":"","totalKg":0.1,"totalPrice":0}
+[2026-04-03T16:09:00.975Z] {"event":"RESPONSE_SENT","rates":[{"service_name":"Standard Shipping","service_code":"standard_tier","total_price":"10000","currency":"INR","description":"","min_delivery_date":"","max_delivery_date":""}]}
+[2026-04-03T16:09:01.632Z] === INCOMING CARRIER REQUEST ===
+[2026-04-03T16:09:01.634Z] {"event":"HMAC_DEBUG","hmacMatch":true,"secretLoaded":true,"hmacHeader":"9JQKX+94NXD2H0u++HqY/cL24BU9capADTrITGPg5Uc=","generatedHmac":"9JQKX+94NXD2H0u++HqY/cL24BU9capADTrITGPg5Uc="}
+[2026-04-03T16:09:01.643Z] HMAC verification PASSED
+[2026-04-03T16:09:01.650Z] {"event":"REQUEST_PARSED","shop":"zofonix-test.myshopify.com","destination":{"country":"JP","province":null,"city":"rate test"},"itemCount":1,"items":[{"name":"","grams":100,"quantity":1,"price":0}],"currency":"INR"}
+[2026-04-03T16:09:01.657Z] {"event":"CART_TOTALS","totalGrams":100,"totalKg":"0.100","lineItemTotalPrice":0,"totalPrice":0,"currency":"INR"}
+[2026-04-03T16:09:01.667Z] {"event":"DB_CANDIDATES","count":1,"rules":[{"name":"International","logic":"STANDARD_TIER","gid":"gid://shopify/DeliveryZone/433841537283"}]}
+[2026-04-03T16:09:01.674Z] {"event":"SCORE_CHECK","ruleName":"International","score":50,"destinationCountry":"JP","destinationProvince":""}
+[2026-04-03T16:09:01.680Z] {"event":"MATCH_SUCCESS","ruleName":"International","logicType":"STANDARD_TIER","score":50}
+[2026-04-03T16:09:01.687Z] {"event":"RULES_PARSED","logicType":"STANDARD_TIER","rules":{"0":{"min":0,"max":null,"rate":0,"min_kg":"1"},"flat_rate":"100"}}
+[2026-04-03T16:09:01.694Z] {"event":"RATE_CALCULATED","calculatedRate":100,"serviceName":"Standard Shipping","serviceCode":"standard_tier","description":"","totalKg":0.1,"totalPrice":0}
+[2026-04-03T16:09:01.705Z] {"event":"RESPONSE_SENT","rates":[{"service_name":"Standard Shipping","service_code":"standard_tier","total_price":"10000","currency":"INR","description":"","min_delivery_date":"","max_delivery_date":""}]}
+[2026-04-03T16:09:02.365Z] === INCOMING CARRIER REQUEST ===
+[2026-04-03T16:09:02.367Z] {"event":"HMAC_DEBUG","hmacMatch":true,"secretLoaded":true,"hmacHeader":"kM16K0ATJ70Tw0SiEGIJxwPJuT1FGqwqWm0Qn+nnm/8=","generatedHmac":"kM16K0ATJ70Tw0SiEGIJxwPJuT1FGqwqWm0Qn+nnm/8="}
+[2026-04-03T16:09:02.374Z] HMAC verification PASSED
+[2026-04-03T16:09:02.382Z] {"event":"REQUEST_PARSED","shop":"zofonix-test.myshopify.com","destination":{"country":"US","province":"CA","city":"rate test"},"itemCount":1,"items":[{"name":"","grams":100,"quantity":1,"price":0}],"currency":"INR"}
+[2026-04-03T16:09:02.387Z] {"event":"CART_TOTALS","totalGrams":100,"totalKg":"0.100","lineItemTotalPrice":0,"totalPrice":0,"currency":"INR"}
+[2026-04-03T16:09:02.399Z] {"event":"DB_CANDIDATES","count":1,"rules":[{"name":"International","logic":"STANDARD_TIER","gid":"gid://shopify/DeliveryZone/433841537283"}]}
+[2026-04-03T16:09:02.404Z] {"event":"SCORE_CHECK","ruleName":"International","score":100,"destinationCountry":"US","destinationProvince":"CA"}
+[2026-04-03T16:09:02.410Z] {"event":"MATCH_SUCCESS","ruleName":"International","logicType":"STANDARD_TIER","score":100}
+[2026-04-03T16:09:02.417Z] {"event":"RULES_PARSED","logicType":"STANDARD_TIER","rules":{"0":{"min":0,"max":null,"rate":0,"min_kg":"1"},"flat_rate":"100"}}
+[2026-04-03T16:09:02.423Z] {"event":"RATE_CALCULATED","calculatedRate":100,"serviceName":"Standard Shipping","serviceCode":"standard_tier","description":"","totalKg":0.1,"totalPrice":0}
+[2026-04-03T16:09:02.434Z] {"event":"RESPONSE_SENT","rates":[{"service_name":"Standard Shipping","service_code":"standard_tier","total_price":"10000","currency":"INR","description":"","min_delivery_date":"","max_delivery_date":""}]}
+[2026-04-03T16:09:03.150Z] === INCOMING CARRIER REQUEST ===
+[2026-04-03T16:09:03.152Z] {"event":"HMAC_DEBUG","hmacMatch":true,"secretLoaded":true,"hmacHeader":"e5KhLV65dGSgf/2aAXjxASen4uQxdE24EHGIFRMubzQ=","generatedHmac":"e5KhLV65dGSgf/2aAXjxASen4uQxdE24EHGIFRMubzQ="}
+[2026-04-03T16:09:03.158Z] HMAC verification PASSED
+[2026-04-03T16:09:03.164Z] {"event":"REQUEST_PARSED","shop":"zofonix-test.myshopify.com","destination":{"country":"AE","province":null,"city":"rate test"},"itemCount":1,"items":[{"name":"","grams":100,"quantity":1,"price":0}],"currency":"INR"}
+[2026-04-03T16:09:03.172Z] {"event":"CART_TOTALS","totalGrams":100,"totalKg":"0.100","lineItemTotalPrice":0,"totalPrice":0,"currency":"INR"}
+[2026-04-03T16:09:03.185Z] {"event":"DB_CANDIDATES","count":1,"rules":[{"name":"International","logic":"STANDARD_TIER","gid":"gid://shopify/DeliveryZone/433841537283"}]}
+[2026-04-03T16:09:03.190Z] {"event":"SCORE_CHECK","ruleName":"International","score":50,"destinationCountry":"AE","destinationProvince":""}
+[2026-04-03T16:09:03.198Z] {"event":"MATCH_SUCCESS","ruleName":"International","logicType":"STANDARD_TIER","score":50}
+[2026-04-03T16:09:03.205Z] {"event":"RULES_PARSED","logicType":"STANDARD_TIER","rules":{"0":{"min":0,"max":null,"rate":0,"min_kg":"1"},"flat_rate":"100"}}
+[2026-04-03T16:09:03.215Z] {"event":"RATE_CALCULATED","calculatedRate":100,"serviceName":"Standard Shipping","serviceCode":"standard_tier","description":"","totalKg":0.1,"totalPrice":0}
+[2026-04-03T16:09:03.221Z] {"event":"RESPONSE_SENT","rates":[{"service_name":"Standard Shipping","service_code":"standard_tier","total_price":"10000","currency":"INR","description":"","min_delivery_date":"","max_delivery_date":""}]}
+[2026-04-03T16:09:03.935Z] === INCOMING CARRIER REQUEST ===
+[2026-04-03T16:09:03.938Z] {"event":"HMAC_DEBUG","hmacMatch":true,"secretLoaded":true,"hmacHeader":"E2y59zVULW5/0xA2ptGY8+itwSEoUI9M+nuxIaz6Ka4=","generatedHmac":"E2y59zVULW5/0xA2ptGY8+itwSEoUI9M+nuxIaz6Ka4="}
+[2026-04-03T16:09:03.946Z] HMAC verification PASSED
+[2026-04-03T16:09:03.953Z] {"event":"REQUEST_PARSED","shop":"zofonix-test.myshopify.com","destination":{"country":"AT","province":null,"city":"rate test"},"itemCount":1,"items":[{"name":"","grams":100,"quantity":1,"price":0}],"currency":"INR"}
+[2026-04-03T16:09:03.961Z] {"event":"CART_TOTALS","totalGrams":100,"totalKg":"0.100","lineItemTotalPrice":0,"totalPrice":0,"currency":"INR"}
+[2026-04-03T16:09:03.971Z] {"event":"DB_CANDIDATES","count":1,"rules":[{"name":"International","logic":"STANDARD_TIER","gid":"gid://shopify/DeliveryZone/433841537283"}]}
+[2026-04-03T16:09:03.978Z] {"event":"SCORE_CHECK","ruleName":"International","score":60,"destinationCountry":"AT","destinationProvince":""}
+[2026-04-03T16:09:03.984Z] {"event":"MATCH_SUCCESS","ruleName":"International","logicType":"STANDARD_TIER","score":60}
+[2026-04-03T16:09:03.991Z] {"event":"RULES_PARSED","logicType":"STANDARD_TIER","rules":{"0":{"min":0,"max":null,"rate":0,"min_kg":"1"},"flat_rate":"100"}}
+[2026-04-03T16:09:03.997Z] {"event":"RATE_CALCULATED","calculatedRate":100,"serviceName":"Standard Shipping","serviceCode":"standard_tier","description":"","totalKg":0.1,"totalPrice":0}
+[2026-04-03T16:09:04.010Z] {"event":"RESPONSE_SENT","rates":[{"service_name":"Standard Shipping","service_code":"standard_tier","total_price":"10000","currency":"INR","description":"","min_delivery_date":"","max_delivery_date":""}]}

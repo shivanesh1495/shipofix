@@ -1,0 +1,30 @@
+﻿[2026-04-03T15:50:07.204Z] {"event":"SCORE_CHECK","ruleName":"International","score":-1,"destinationCountry":"IN","destinationProvince":"TN"}
+[2026-04-03T15:50:07.226Z] {"event":"SCORE_CHECK","ruleName":"Domestic","score":100,"destinationCountry":"IN","destinationProvince":"TN"}
+[2026-04-03T15:50:07.254Z] {"event":"MATCH_SUCCESS","ruleName":"Domestic","logicType":"WEIGHT_MULTIPLIER","score":100}
+[2026-04-03T15:50:07.273Z] {"event":"RULES_PARSED","logicType":"WEIGHT_MULTIPLIER","rules":{"0":{"min":0,"max":null,"rate":"10","min_kg":"10","max_kg":"100"},"rate_per_kg":"10","percentage":"0.1"}}
+[2026-04-03T15:50:07.301Z] {"event":"RATE_CALCULATED","calculatedRate":0,"serviceName":"Per KG Dynamic Shipping","serviceCode":"weight_multiplier","description":"0.00kg Ã— â‚¹10/kg","totalKg":0,"totalPrice":749.95}
+[2026-04-03T15:50:07.329Z] {"event":"RESPONSE_SENT","rates":[{"service_name":"Per KG Dynamic Shipping","service_code":"weight_multiplier","total_price":"0","currency":"INR","description":"0.00kg Ã— â‚¹10/kg","min_delivery_date":"","max_delivery_date":""}]}
+[2026-04-03T15:50:35.709Z] === INCOMING CARRIER REQUEST ===
+[2026-04-03T15:50:35.789Z] {"event":"HMAC_DEBUG","hmacMatch":true,"secretLoaded":true,"hmacHeader":"ClksnCfkGlP79F/whxjE4q7eGmTjuj9gsrNJFpgCHLM=","generatedHmac":"ClksnCfkGlP79F/whxjE4q7eGmTjuj9gsrNJFpgCHLM="}
+[2026-04-03T15:50:36.026Z] HMAC verification PASSED
+[2026-04-03T15:50:36.193Z] {"event":"REQUEST_PARSED","shop":"zofonix-test.myshopify.com","destination":{"country":"IN","province":"TN","city":"Coimbatore"},"itemCount":1,"items":[{"name":"The Collection Snowboard: Liquid","grams":0,"quantity":1,"price":74995}],"currency":"INR"}
+[2026-04-03T15:50:36.442Z] {"event":"CART_TOTALS","totalGrams":0,"totalKg":"0.000","lineItemTotalPrice":74995,"totalPrice":749.95,"currency":"INR"}
+[2026-04-03T15:50:37.503Z] {"event":"DB_CANDIDATES","count":2,"rules":[{"name":"International","logic":"STANDARD_TIER","gid":"gid://shopify/DeliveryZone/433841537283"},{"name":"Domestic","logic":"WEIGHT_MULTIPLIER","gid":"gid://shopify/DeliveryZone/433841471747"}]}
+[2026-04-03T15:50:37.571Z] {"event":"SCORE_CHECK","ruleName":"International","score":-1,"destinationCountry":"IN","destinationProvince":"TN"}
+[2026-04-03T15:50:37.629Z] {"event":"SCORE_CHECK","ruleName":"Domestic","score":100,"destinationCountry":"IN","destinationProvince":"TN"}
+[2026-04-03T15:50:37.751Z] {"event":"MATCH_SUCCESS","ruleName":"Domestic","logicType":"WEIGHT_MULTIPLIER","score":100}
+[2026-04-03T15:50:38.230Z] {"event":"RULES_PARSED","logicType":"WEIGHT_MULTIPLIER","rules":{"0":{"min":0,"max":null,"rate":"10","min_kg":"10","max_kg":"100"},"rate_per_kg":"10","percentage":"0.1","min_charge":"10","max_charge":"20"}}
+[2026-04-03T15:50:38.464Z] {"event":"RATE_CALCULATED","calculatedRate":10,"serviceName":"Per KG Dynamic Shipping","serviceCode":"weight_multiplier","description":"0.00kg Ã— â‚¹10/kg","totalKg":0,"totalPrice":749.95}
+[2026-04-03T15:50:38.503Z] {"event":"RESPONSE_SENT","rates":[{"service_name":"Per KG Dynamic Shipping","service_code":"weight_multiplier","total_price":"1000","currency":"INR","description":"0.00kg Ã— â‚¹10/kg","min_delivery_date":"","max_delivery_date":""}]}
+[2026-04-03T15:51:36.062Z] === INCOMING CARRIER REQUEST ===
+[2026-04-03T15:51:36.077Z] {"event":"HMAC_DEBUG","hmacMatch":true,"secretLoaded":true,"hmacHeader":"NEXFOmq0rB2nHJAwnD4GUNaI732sNLjYXJWdDgwW5w0=","generatedHmac":"NEXFOmq0rB2nHJAwnD4GUNaI732sNLjYXJWdDgwW5w0="}
+[2026-04-03T15:51:36.116Z] HMAC verification PASSED
+[2026-04-03T15:51:36.188Z] {"event":"REQUEST_PARSED","shop":"zofonix-test.myshopify.com","destination":{"country":"IN","province":"TN","city":"Salem"},"itemCount":1,"items":[{"name":"The Collection Snowboard: Liquid","grams":0,"quantity":5,"price":74995}],"currency":"INR"}
+[2026-04-03T15:51:36.224Z] {"event":"CART_TOTALS","totalGrams":0,"totalKg":"0.000","lineItemTotalPrice":374975,"totalPrice":3749.75,"currency":"INR"}
+[2026-04-03T15:51:36.267Z] {"event":"DB_CANDIDATES","count":2,"rules":[{"name":"International","logic":"STANDARD_TIER","gid":"gid://shopify/DeliveryZone/433841537283"},{"name":"Domestic","logic":"WEIGHT_MULTIPLIER","gid":"gid://shopify/DeliveryZone/433841471747"}]}
+[2026-04-03T15:51:36.291Z] {"event":"SCORE_CHECK","ruleName":"International","score":-1,"destinationCountry":"IN","destinationProvince":"TN"}
+[2026-04-03T15:51:36.327Z] {"event":"SCORE_CHECK","ruleName":"Domestic","score":100,"destinationCountry":"IN","destinationProvince":"TN"}
+[2026-04-03T15:51:36.358Z] {"event":"MATCH_SUCCESS","ruleName":"Domestic","logicType":"WEIGHT_MULTIPLIER","score":100}
+[2026-04-03T15:51:36.379Z] {"event":"RULES_PARSED","logicType":"WEIGHT_MULTIPLIER","rules":{"0":{"min":0,"max":null,"rate":"10","min_kg":"10","max_kg":"100"},"rate_per_kg":"10","percentage":"0.1","min_charge":"10","max_charge":"20"}}
+[2026-04-03T15:51:36.406Z] {"event":"RATE_CALCULATED","calculatedRate":10,"serviceName":"Per KG Dynamic Shipping","serviceCode":"weight_multiplier","description":"0.00kg Ã— â‚¹10/kg","totalKg":0,"totalPrice":3749.75}
+[2026-04-03T15:51:36.428Z] {"event":"RESPONSE_SENT","rates":[{"service_name":"Per KG Dynamic Shipping","service_code":"weight_multiplier","total_price":"1000","currency":"INR","description":"0.00kg Ã— â‚¹10/kg","min_delivery_date":"","max_delivery_date":""}]}

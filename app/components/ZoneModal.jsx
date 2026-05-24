@@ -170,6 +170,13 @@ export default function ZoneModal({
 
             <Scrollable style={{ maxHeight: "320px" }} shadow>
               <div style={{ padding: "4px 0" }}>
+                {filteredCountries.length === 0 && (
+                  <div style={{ padding: "32px 20px", textAlign: "center" }}>
+                    <Text variant="bodySm" tone="subdued">
+                      No countries match &quot;{countrySearch}&quot;.
+                    </Text>
+                  </div>
+                )}
                 {filteredCountries.map((country) => {
                   const stateData = modalSelectedRegions[country.code];
                   const isChecked = stateData?.checked || false;

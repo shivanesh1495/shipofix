@@ -175,6 +175,12 @@ body {
   background: var(--gray-50);
 }
 
+.zone-item:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: -2px;
+  background: var(--gray-50);
+}
+
 .zone-item.active {
   background: var(--gray-50);
   border-left-color: var(--black);

@@ -54,38 +54,59 @@ export default function ZoneSidebar({
       </div>
       <Divider />
 
-      <div style={{ padding: "8px 0" }}>
-        {zones.map((z, i) => (
-          <div
-            key={z.id}
-            className={`zone-item ${z.id === selectedZoneId ? "active" : ""}`}
-            onClick={() => onSelectZone(z.id)}
-            style={{ animationDelay: `${i * 40}ms` }}
-          >
-            <div
-              className={`zone-icon ${z.isDomestic ? "domestic" : "international"}`}
-            >
-              <Icon source={z.isDomestic ? HomeIcon : GlobeIcon} />
-            </div>
-            <div className="zone-info">
-              <div className="zone-name">{z.name}</div>
-              <div className="zone-meta">
-                {z.countries.length}{" "}
-                {z.countries.length === 1 ? "country" : "countries"}
-                {z.rule && (
-                  <span style={{ color: "#737373", marginLeft: "6px" }}>
-                    · {z.rule.logicType.replace(/_/g, " ").toLowerCase()}
-                  </span>
-                )}
-              </div>
-            </div>
-            {z.rule ? (
-              <span className="zone-badge custom">Custom</span>
-            ) : (
-              <span className="zone-badge default">Default</span>
-            )}
+      <div
+        className="zone-sidebar-list"
+        style={{ padding: "8px 0", maxHeight: "60vh", overflowY: "auto" }}
+      >
+        {zones.length === 0 ? (
+          <div style={{ padding: "32px 20px", textAlign: "center" }}>
+            <Text variant="bodySm" tone="subdued">
+              No shipping zones yet. Create one to start configuring rates.
+            </Text>
           </div>
-        ))}
+        ) : (
+          zones.map((z, i) => (
+            <div
+              key={z.id}
+              className={`zone-item ${z.id === selectedZoneId ? "active" : ""}`}
+              onClick={() => onSelectZone(z.id)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onSelectZone(z.id);
+                }
+              }}
+              role="button"
+              tabIndex={0}
+              aria-pressed={z.id === selectedZoneId}
+              aria-label={`Select zone ${z.name}`}
+              style={{ animationDelay: `${i * 40}ms` }}
+            >
+              <div
+                className={`zone-icon ${z.isDomestic ? "domestic" : "international"}`}
+              >
+                <Icon source={z.isDomestic ? HomeIcon : GlobeIcon} />
+              </div>
+              <div className="zone-info">
+                <div className="zone-name">{z.name}</div>
+                <div className="zone-meta">
+                  {z.countries.length}{" "}
+                  {z.countries.length === 1 ? "country" : "countries"}
+                  {z.rule && (
+                    <span style={{ color: "#737373", marginLeft: "6px" }}>
+                      · {z.rule.logicType.replace(/_/g, " ").toLowerCase()}
+                    </span>
+                  )}
+                </div>
+              </div>
+              {z.rule ? (
+                <span className="zone-badge custom">Custom</span>
+              ) : (
+                <span className="zone-badge default">Default</span>
+              )}
+            </div>
+          ))
+        )}
       </div>
 
       {customCount > 0 && (

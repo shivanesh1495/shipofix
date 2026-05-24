@@ -527,27 +527,38 @@ export default function ShippingDashboard() {
     }
   }, [activeZone]);
 
+  /* Toast lifetime scaled to message length — short confirmations
+     auto-dismiss quickly, longer errors stay on screen long enough to
+     actually read. Errors never disappear in under 8s. */
+  const toastDuration = (msg, isError) => {
+    const base = isError ? 8000 : 4000;
+    const perChar = isError ? 60 : 35;
+    return Math.min(20000, base + String(msg || "").length * perChar);
+  };
+
   // Feedback from fetcher — revalidate in-place instead of full page reload
   useEffect(() => {
     if (fetcher.data?.message) {
       setToastMsg(fetcher.data.message);
       revalidator.revalidate();
-      setTimeout(() => setToastMsg(null), 4000);
+      setTimeout(() => setToastMsg(null), toastDuration(fetcher.data.message, false));
     }
     if (fetcher.data?.error) {
-      setToastMsg(`Error: ${fetcher.data.error}`);
-      setTimeout(() => setToastMsg(null), 6000);
+      const m = `Error: ${fetcher.data.error}`;
+      setToastMsg(m);
+      setTimeout(() => setToastMsg(null), toastDuration(m, true));
     }
   }, [fetcher.data]);
 
   useEffect(() => {
     if (actionData?.message) {
       setToastMsg(actionData.message);
-      setTimeout(() => setToastMsg(null), 4000);
+      setTimeout(() => setToastMsg(null), toastDuration(actionData.message, false));
     }
     if (actionData?.error) {
-      setToastMsg(`Error: ${actionData.error}`);
-      setTimeout(() => setToastMsg(null), 6000);
+      const m = `Error: ${actionData.error}`;
+      setToastMsg(m);
+      setTimeout(() => setToastMsg(null), toastDuration(m, true));
     }
   }, [actionData]);
 
@@ -831,7 +842,10 @@ export default function ShippingDashboard() {
                   onToast={(m) => {
                     setToastMsg(m);
                     revalidator.revalidate();
-                    setTimeout(() => setToastMsg(null), 4000);
+                    setTimeout(
+                      () => setToastMsg(null),
+                      toastDuration(m, String(m || "").startsWith("Error")),
+                    );
                   }}
                   onApplied={() => setSelectedTab(1)}
                   onToggleEnabled={handleToggleBulkEdit}

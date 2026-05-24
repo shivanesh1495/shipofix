@@ -748,6 +748,27 @@ body {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
+   BULK EDIT — two-column layout
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.bulk-edit-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+.bulk-edit-split-col {
+  min-width: 0; /* let children shrink instead of overflowing */
+}
+
+@media (max-width: 980px) {
+  .bulk-edit-split {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
    BULK EDIT DOCS MODAL
    ═══════════════════════════════════════════════════════════════════════ */
 

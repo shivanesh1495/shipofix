@@ -157,210 +157,11 @@ export default function BulkEdit({
   const uploading =
     fetcher.state === "submitting" || fetcher.state === "loading";
 
-  if (!enabled) {
-    return (
-      <Card>
-        <Box padding="500">
-          <BlockStack gap="300" align="center" inlineAlign="center">
-            <Text variant="headingMd" as="h3">Bulk Edit is turned off</Text>
-            <Text tone="subdued">
-              Turn it on to import shipping rules from an Excel template.
-            </Text>
-            {onToggleEnabled && (
-              <Button
-                variant="primary"
-                loading={toggling}
-                onClick={() => onToggleEnabled(true)}
-              >
-                Turn on Bulk Edit
-              </Button>
-            )}
-          </BlockStack>
-        </Box>
-      </Card>
-    );
-  }
-
-  return (
-    <BlockStack gap="400">
-      {/* Feature toggle — managed by app, kept beside the workflow itself */}
-      {onToggleEnabled && (
-        <Card>
-          <Box padding="300">
-            <InlineStack align="space-between" blockAlign="center" wrap={false}>
-              <BlockStack gap="050">
-                <InlineStack gap="200" blockAlign="center">
-                  <Text variant="headingSm" as="h3">Bulk Edit</Text>
-                  <Badge tone="success">On</Badge>
-                </InlineStack>
-                <Text tone="subdued" variant="bodySm">
-                  Import shipping rules from an Excel template · Managed by app
-                </Text>
-              </BlockStack>
-              <Button
-                tone="critical"
-                loading={toggling}
-                onClick={() => onToggleEnabled(false)}
-              >
-                Turn off
-              </Button>
-            </InlineStack>
-          </Box>
-        </Card>
-      )}
-
-      {/* Quick pointer to the full guide (Logic #, codes, examples) */}
-      <Banner
-        tone="info"
-        title="New to the template? Read the guide first."
-        action={{
-          content: "View documentation",
-          onAction: () => setDocsOpen(true),
-        }}
-      >
-        <Text>
-          The guide explains the two editable sheets — <b>Bulk Edit</b> for
-          coverage + logic, and <b>Rate Bands</b> for category slabs (Logic 2
-          &amp; 3) — and lists every Logic # and country / zone code.
-        </Text>
-      </Banner>
-
-      {/* Step 1: download */}
-      <Card>
-        <BlockStack gap="300">
-          <InlineStack align="space-between" blockAlign="center" gap="400" wrap={false}>
-            <Text variant="headingMd" as="h3">
-              Step 1 · Download the template
-            </Text>
-            <InlineStack gap="200" wrap={false}>
-              <Button onClick={() => setDocsOpen(true)}>
-                View documentation
-              </Button>
-              <Button
-                variant="primary"
-                loading={downloading}
-                onClick={handleDownloadTemplate}
-                accessibilityLabel="Download Excel template"
-              >
-                Download .xlsx
-              </Button>
-            </InlineStack>
-          </InlineStack>
-          <Text tone="subdued">
-            The workbook ships with four sheets: <b>Bulk Edit</b> (coverage +
-            logic, with Country / Zone dropdowns pre-filled), <b>Rate Bands</b>{" "}
-            (slabs for Logic 2 &amp; 3 — one row per band, linked by Name),{" "}
-            <b>All Regions</b> (read-only reference), and <b>Instructions</b>.
-            Fill in only the rows you need.
-          </Text>
-        </BlockStack>
-      </Card>
-
-      {/* Last upload — only when a previous file is stored */}
-      {lastUpload && (
-        <Card>
-          <BlockStack gap="300">
-            <InlineStack align="space-between" blockAlign="center" gap="400" wrap={false}>
-              <Text variant="headingMd" as="h3">
-                Last uploaded file
-              </Text>
-              <InlineStack gap="200" wrap={false}>
-                <Button
-                  loading={downloadingLast}
-                  onClick={() => setConfirmDownload(true)}
-                >
-                  Download
-                </Button>
-                <Button
-                  tone="critical"
-                  loading={deleteFetcher.state !== "idle"}
-                  onClick={() => setConfirmDelete(true)}
-                >
-                  Delete
-                </Button>
-              </InlineStack>
-            </InlineStack>
-            <Text tone="subdued">
-              Download this to tweak a row, then delete the stored copy and
-              upload the edited version. Re-uploading replaces every existing
-              rule.
-            </Text>
-            <Box
-              padding="300"
-              background="bg-surface-secondary"
-              borderRadius="200"
-            >
-              <BlockStack gap="050">
-                <Text fontWeight="semibold">{lastUpload.filename}</Text>
-                <Text tone="subdued" variant="bodySm">
-                  {(lastUpload.size / 1024).toFixed(1)} KB · uploaded{" "}
-                  {new Date(lastUpload.uploadedAt).toLocaleString()}
-                </Text>
-              </BlockStack>
-            </Box>
-          </BlockStack>
-        </Card>
-      )}
-
-      {/* Step 2: upload */}
-      <Card>
-        <BlockStack gap="300">
-          <BlockStack gap="050">
-            <Text variant="headingMd" as="h3">Step 2 · Upload the filled template</Text>
-            <Text tone="subdued">
-              Uploading replaces the entire <b>bulk-edit ruleset</b> for this
-              shop. Your zone-wise rules from Configuration Logic are
-              untouched and will become active again the moment Bulk Edit is
-              turned off.
-            </Text>
-          </BlockStack>
-
-          <DropZone
-            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            type="file"
-            allowMultiple={false}
-            onDrop={handleDrop}
-          >
-            {file ? (
-              <Box padding="400">
-                <InlineStack align="space-between" blockAlign="center">
-                  <BlockStack gap="050">
-                    <Text fontWeight="semibold">{file.name}</Text>
-                    <Text tone="subdued" variant="bodySm">
-                      {(file.size / 1024).toFixed(1)} KB · ready to upload
-                    </Text>
-                  </BlockStack>
-                  <Badge tone="success">Selected</Badge>
-                </InlineStack>
-              </Box>
-            ) : (
-              <DropZone.FileUpload
-                actionTitle="Add file"
-                actionHint="Drag a .xlsx here, or click to browse"
-              />
-            )}
-          </DropZone>
-
-          <InlineStack align="end" gap="200">
-            {file && (
-              <Button onClick={() => setFile(null)} disabled={uploading}>
-                Clear
-              </Button>
-            )}
-            <Button
-              variant="primary"
-              onClick={handleUpload}
-              loading={uploading}
-              disabled={!file || uploading}
-            >
-              Apply Bulk Edit
-            </Button>
-          </InlineStack>
-        </BlockStack>
-      </Card>
-
-      {/* Results — success banner with per-rule row issues and non-blocking
-          warnings rendered separately so vendors can triage at a glance. */}
+  /* Result banners — extracted into a render helper so they can sit inside
+     the left column of the two-column layout (next to the upload action),
+     instead of full-width below the whole grid. */
+  const renderResultBanners = () => (
+    <>
       {lastResult && lastResult.success && lastResult.summary && (
         <Banner tone="success" title={lastResult.message}>
           <Text variant="bodySm">
@@ -397,9 +198,6 @@ export default function BulkEdit({
           </List>
         </Banner>
       )}
-      {/* Validation rejection — upload was parsed cleanly but one or more
-          rules had errors. Nothing was saved. Critical tone so vendors don't
-          mistake it for a partial-success state. */}
       {lastResult && lastResult.success === false && Array.isArray(lastResult.errors) && lastResult.errors.length > 0 && (
         <Banner tone="critical" title={lastResult.message || "Upload rejected — fix the issues below."}>
           <BlockStack gap="200">
@@ -428,6 +226,229 @@ export default function BulkEdit({
           <Text>{lastResult.error}</Text>
         </Banner>
       )}
+    </>
+  );
+
+  if (!enabled) {
+    return (
+      <Card>
+        <Box padding="500">
+          <BlockStack gap="300" align="center" inlineAlign="center">
+            <Text variant="headingMd" as="h3">Bulk Edit is turned off</Text>
+            <Text tone="subdued">
+              Turn it on to import shipping rules from an Excel template.
+            </Text>
+            {onToggleEnabled && (
+              <Button
+                variant="primary"
+                loading={toggling}
+                onClick={() => onToggleEnabled(true)}
+              >
+                Turn on Bulk Edit
+              </Button>
+            )}
+          </BlockStack>
+        </Box>
+      </Card>
+    );
+  }
+
+  return (
+    <BlockStack gap="400">
+      {/* Two-column layout: LEFT = action (upload + results), RIGHT = setup
+          (toggle, docs pointer, template download, last-upload file). The
+          grid collapses to a single column on narrow widths via the
+          bulk-edit-split CSS class. */}
+      <div className="bulk-edit-split">
+        {/* ── LEFT column: Step 2 upload + result banners ── */}
+        <div className="bulk-edit-split-col">
+          <BlockStack gap="400">
+            {/* Step 2: upload */}
+            <Card>
+              <BlockStack gap="300">
+                <BlockStack gap="050">
+                  <Text variant="headingMd" as="h3">Step 2 · Upload the filled template</Text>
+                  <Text tone="subdued">
+                    Uploading replaces the entire <b>bulk-edit ruleset</b> for this
+                    shop. Your zone-wise rules from Configuration Logic are
+                    untouched and will become active again the moment Bulk Edit is
+                    turned off.
+                  </Text>
+                </BlockStack>
+
+                <DropZone
+                  accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  type="file"
+                  allowMultiple={false}
+                  onDrop={handleDrop}
+                >
+                  {file ? (
+                    <Box padding="400">
+                      <InlineStack align="space-between" blockAlign="center">
+                        <BlockStack gap="050">
+                          <Text fontWeight="semibold">{file.name}</Text>
+                          <Text tone="subdued" variant="bodySm">
+                            {(file.size / 1024).toFixed(1)} KB · ready to upload
+                          </Text>
+                        </BlockStack>
+                        <Badge tone="success">Selected</Badge>
+                      </InlineStack>
+                    </Box>
+                  ) : (
+                    <DropZone.FileUpload
+                      actionTitle="Add file"
+                      actionHint="Drag a .xlsx here, or click to browse"
+                    />
+                  )}
+                </DropZone>
+
+                <InlineStack align="end" gap="200">
+                  {file && (
+                    <Button onClick={() => setFile(null)} disabled={uploading}>
+                      Clear
+                    </Button>
+                  )}
+                  <Button
+                    variant="primary"
+                    onClick={handleUpload}
+                    loading={uploading}
+                    disabled={!file || uploading}
+                  >
+                    Apply Bulk Edit
+                  </Button>
+                </InlineStack>
+              </BlockStack>
+            </Card>
+            {/* Result banners render below the upload card on the LEFT side
+                so feedback sits next to the action that produced it. */}
+            {renderResultBanners()}
+          </BlockStack>
+        </div>
+
+        {/* ── RIGHT column: setup (toggle, docs, download, last upload) ── */}
+        <div className="bulk-edit-split-col">
+          <BlockStack gap="400">
+            {/* Feature toggle — managed by app, kept beside the workflow itself */}
+            {onToggleEnabled && (
+              <Card>
+                <Box padding="300">
+                  <InlineStack align="space-between" blockAlign="center" wrap={false}>
+                    <BlockStack gap="050">
+                      <InlineStack gap="200" blockAlign="center">
+                        <Text variant="headingSm" as="h3">Bulk Edit</Text>
+                        <Badge tone="success">On</Badge>
+                      </InlineStack>
+                      <Text tone="subdued" variant="bodySm">
+                        Import shipping rules from an Excel template · Managed by app
+                      </Text>
+                    </BlockStack>
+                    <Button
+                      tone="critical"
+                      loading={toggling}
+                      onClick={() => onToggleEnabled(false)}
+                    >
+                      Turn off
+                    </Button>
+                  </InlineStack>
+                </Box>
+              </Card>
+            )}
+
+            {/* Quick pointer to the full guide (Logic #, codes, examples) */}
+            <Banner
+              tone="info"
+              title="New to the template? Read the guide first."
+              action={{
+                content: "View documentation",
+                onAction: () => setDocsOpen(true),
+              }}
+            >
+              <Text>
+                The guide explains the two editable sheets — <b>Bulk Edit</b> for
+                coverage + logic, and <b>Rate Bands</b> for category slabs (Logic 2
+                &amp; 3) — and lists every Logic # and country / zone code.
+              </Text>
+            </Banner>
+
+            {/* Step 1: download */}
+            <Card>
+              <BlockStack gap="300">
+                <InlineStack align="space-between" blockAlign="center" gap="400" wrap={false}>
+                  <Text variant="headingMd" as="h3">
+                    Step 1 · Download the template
+                  </Text>
+                  <InlineStack gap="200" wrap={false}>
+                    <Button onClick={() => setDocsOpen(true)}>
+                      View documentation
+                    </Button>
+                    <Button
+                      variant="primary"
+                      loading={downloading}
+                      onClick={handleDownloadTemplate}
+                      accessibilityLabel="Download Excel template"
+                    >
+                      Download .xlsx
+                    </Button>
+                  </InlineStack>
+                </InlineStack>
+                <Text tone="subdued">
+                  The workbook ships with four sheets: <b>Bulk Edit</b> (coverage +
+                  logic, with Country / Zone dropdowns pre-filled), <b>Rate Bands</b>{" "}
+                  (slabs for Logic 2 &amp; 3 — one row per band, linked by Name),{" "}
+                  <b>All Regions</b> (read-only reference), and <b>Instructions</b>.
+                  Fill in only the rows you need.
+                </Text>
+              </BlockStack>
+            </Card>
+
+            {/* Last upload — only when a previous file is stored */}
+            {lastUpload && (
+              <Card>
+                <BlockStack gap="300">
+                  <InlineStack align="space-between" blockAlign="center" gap="400" wrap={false}>
+                    <Text variant="headingMd" as="h3">
+                      Last uploaded file
+                    </Text>
+                    <InlineStack gap="200" wrap={false}>
+                      <Button
+                        loading={downloadingLast}
+                        onClick={() => setConfirmDownload(true)}
+                      >
+                        Download
+                      </Button>
+                      <Button
+                        tone="critical"
+                        loading={deleteFetcher.state !== "idle"}
+                        onClick={() => setConfirmDelete(true)}
+                      >
+                        Delete
+                      </Button>
+                    </InlineStack>
+                  </InlineStack>
+                  <Text tone="subdued">
+                    Download this to tweak a row, then delete the stored copy and
+                    upload the edited version. Re-uploading replaces every existing
+                    rule.
+                  </Text>
+                  <Box
+                    padding="300"
+                    background="bg-surface-secondary"
+                    borderRadius="200"
+                  >
+                    <BlockStack gap="050">
+                      <Text fontWeight="semibold">{lastUpload.filename}</Text>
+                      <Text tone="subdued" variant="bodySm">
+                        {(lastUpload.size / 1024).toFixed(1)} KB · uploaded{" "}
+                        {new Date(lastUpload.uploadedAt).toLocaleString()}
+                      </Text>
+                    </BlockStack>
+                  </Box>
+                </BlockStack>
+              </Card>
+            )}
+          </BlockStack>
+        </div>
+      </div>
 
       {/* Download-last confirmation */}
       <Modal

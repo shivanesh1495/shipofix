@@ -222,6 +222,9 @@ export const loader = async ({ request }) => {
 
   return {
     zones: combined,
+    /* Bulk rules are independent of Shopify zones — Rules Overview renders
+       them directly in bulk mode (one rule = many country/province rows). */
+    bulkRules,
     carrierStatus,
     shopCountry,
     profileId,
@@ -470,6 +473,7 @@ export const action = async ({ request }) => {
 export default function ShippingDashboard() {
   const {
     zones,
+    bulkRules,
     carrierStatus,
     profileId,
     locationGroupId,
@@ -805,6 +809,7 @@ export default function ShippingDashboard() {
               ) : selectedTab === 1 ? (
                 <RulesOverview
                   zones={zones}
+                  bulkRules={bulkRules}
                   searchQuery={searchQuery}
                   setSearchQuery={setSearchQuery}
                   filterType={filterType}

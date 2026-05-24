@@ -64,81 +64,137 @@ function countrySummary(zone) {
   return `${first} +${countries.length - 1} more`;
 }
 
-/* Flatten one zone + its rule into rule-row(s) for the bulk-mode view.
-   Only zones that actually have a bulk-edit rule produce rows — otherwise
-   the table would balloon to thousands of empty country/province rows.
-   For range types we emit one row per band. */
-function flattenZoneForBulk(zone) {
-  const rule = zone.bulkRule;
-  if (!rule) return [];
+/* Flatten one BulkEditRule into spreadsheet-style rows that mirror the
+   Excel upload layout: one row per (country, province) coverage cell,
+   then any extra band rows for range logic types.
 
-  const baseCountry = countrySummary(zone);
+   First row of a rule carries Name / Logic # / Currency. Coverage rows
+   after that just show Country / Zone. The rate value lands on the
+   first coverage row for non-range types, or on its own band row(s)
+   for range types. */
+function flattenBulkRule(rule) {
   const logicNum = LOGIC_NUM[rule.logicType] ?? "";
   const currency = rule.currency || "";
 
-  let parsed = {};
+  let parsedRules = {};
   try {
-    parsed = JSON.parse(rule.rulesJson || "{}");
+    parsedRules = JSON.parse(rule.rulesJson || "{}");
   } catch {
-    parsed = {};
+    parsedRules = {};
   }
 
-  const row = (extra = {}) => ({
-    name: zone.name,
-    country: baseCountry,
-    zone: "",
-    logic: logicNum,
-    currency,
+  let parsedCountries = [];
+  try {
+    parsedCountries = JSON.parse(rule.countries || "[]");
+  } catch {
+    parsedCountries = [];
+  }
+
+  /* Expand countries → one row per (country) or (country × province).
+     Carry the raw codes alongside the display labels so per-destination
+     override lookup can match without re-parsing the label string. */
+  const coverageRows = [];
+  for (const c of parsedCountries) {
+    if (c.restOfWorld) {
+      coverageRows.push({ country: "Rest of World", zone: "", countryCode: "", provinceCode: "" });
+      continue;
+    }
+    const countryLabel = c.countryCode
+      ? `${c.name || c.countryCode} (${c.countryCode})`
+      : c.name || "—";
+    const provinces = Array.isArray(c.provinces) ? c.provinces : [];
+    if (provinces.length === 0) {
+      coverageRows.push({ country: countryLabel, zone: "", countryCode: c.countryCode || "", provinceCode: "" });
+    } else {
+      for (const p of provinces) {
+        const pCode = p?.code || "";
+        const pName = p?.name || pCode;
+        const zoneLabel = pCode && pName ? `${pName} (${pCode})` : pName || pCode;
+        coverageRows.push({ country: countryLabel, zone: zoneLabel, countryCode: c.countryCode || "", provinceCode: pCode });
+      }
+    }
+  }
+
+  if (coverageRows.length === 0) {
+    coverageRows.push({ country: "—", zone: "", countryCode: "", provinceCode: "" });
+  }
+
+  /* Non-range types: default rate + optional per-destination overrides */
+  const defaultRate = (() => {
+    switch (rule.logicType) {
+      case "STANDARD_TIER":
+        return parsedRules.flat_rate ?? "";
+      case "WEIGHT_MULTIPLIER":
+        return parsedRules.rate_per_kg ?? "";
+      case "PRICE_MULTIPLIER":
+        return parsedRules.percentage ?? "";
+      case "ITEM_MULTIPLIER":
+        return parsedRules.rate_per_item ?? "";
+      default:
+        return null;
+    }
+  })();
+
+  const overrideByKey = new Map();
+  if (!Array.isArray(parsedRules) && Array.isArray(parsedRules.overrides)) {
+    for (const o of parsedRules.overrides) {
+      overrideByKey.set(`${o.countryCode}::${o.province || ""}`, o.rate);
+    }
+  }
+
+  /* Look up the rate that applies to this exact coverage row.
+     Province match wins over country-level fallback. */
+  const rateForCell = (cov) => {
+    const cc = cov.countryCode || "";
+    const pc = cov.provinceCode || "";
+    if (cc && pc && overrideByKey.has(`${cc}::${pc}`)) {
+      return overrideByKey.get(`${cc}::${pc}`);
+    }
+    if (cc && overrideByKey.has(`${cc}::`)) {
+      return overrideByKey.get(`${cc}::`);
+    }
+    return defaultRate;
+  };
+
+  const isRange =
+    rule.logicType === "WEIGHT_RANGE" || rule.logicType === "PRICE_RANGE";
+
+  const rows = coverageRows.map((cov, i) => ({
+    name: i === 0 ? rule.name : "",
+    country: cov.country,
+    zone: cov.zone,
+    logic: i === 0 ? logicNum : "",
+    currency: i === 0 ? currency : "",
     min: "",
     max: "",
-    rate: "",
-    ...extra,
-  });
+    rate: isRange ? "" : (rateForCell(cov) ?? ""),
+  }));
 
-  switch (rule.logicType) {
-    case "STANDARD_TIER":
-      return [row({ rate: parsed.flat_rate ?? "" })];
-    case "WEIGHT_MULTIPLIER":
-      return [row({ rate: parsed.rate_per_kg ?? "" })];
-    case "PRICE_MULTIPLIER":
-      return [row({ rate: parsed.percentage ?? "" })];
-    case "ITEM_MULTIPLIER":
-      return [row({ rate: parsed.rate_per_item ?? "" })];
-    case "WEIGHT_RANGE":
-    case "PRICE_RANGE": {
-      const bands = Array.isArray(parsed) ? parsed : [];
-      if (bands.length === 0) return [row()];
-      const isWeight = rule.logicType === "WEIGHT_RANGE";
-      const minKey = isWeight ? "min_kg" : "min_total";
-      const maxKey = isWeight ? "max_kg" : "max_total";
-      /* First band carries Name/Country/Logic/Currency; subsequent bands
-         show just Min/Max/Rate (matches the .xlsx template convention). */
-      return bands.map((b, i) =>
-        i === 0
-          ? row({
-              min: b[minKey] ?? "",
-              max: b[maxKey] ?? "",
-              rate: b.rate ?? "",
-            })
-          : {
-              name: "",
-              country: "",
-              zone: "",
-              logic: "",
-              currency: "",
-              min: b[minKey] ?? "",
-              max: b[maxKey] ?? "",
-              rate: b.rate ?? "",
-            },
-      );
+  /* Range types: append one row per band after the coverage rows */
+  if (isRange) {
+    const bands = Array.isArray(parsedRules) ? parsedRules : [];
+    const minKey = rule.logicType === "WEIGHT_RANGE" ? "min_kg" : "min_total";
+    const maxKey = rule.logicType === "WEIGHT_RANGE" ? "max_kg" : "max_total";
+    for (const b of bands) {
+      rows.push({
+        name: "",
+        country: "",
+        zone: "",
+        logic: "",
+        currency: "",
+        min: b?.[minKey] ?? "",
+        max: b?.[maxKey] ?? "",
+        rate: b?.rate ?? "",
+      });
     }
-    default:
-      return [row()];
   }
+
+  return rows;
 }
 
 export default function RulesOverview({
   zones,
+  bulkRules = [],
   searchQuery,
   setSearchQuery,
   filterType,
@@ -150,28 +206,50 @@ export default function RulesOverview({
   disabled = false,
   bulkMode = false,
 }) {
-  /* Spreadsheet-style rows for Bulk-Edit mode. Built lazily so we only pay
-     the flatten cost when actually showing this view. */
+  /* Spreadsheet-style rows for Bulk-Edit mode. Sort rules first so the
+     leading row of each rule stays together with its coverage rows. */
   const bulkRows = useMemo(() => {
     if (!bulkMode) return [];
-    let rows = zones.flatMap((z) => flattenZoneForBulk(z));
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      rows = rows.filter((r) =>
-        [r.name, r.country, r.zone]
-          .some((v) => String(v || "").toLowerCase().includes(q)),
-      );
-    }
+
+    let rules = [...bulkRules];
+
     if (filterType !== "ALL") {
-      const num = LOGIC_NUM[filterType];
-      rows = rows.filter((r) => r.logic === num);
+      rules = rules.filter((r) => r.logicType === filterType);
     }
     if (sortOrder === "NAME_ASC")
-      rows.sort((a, b) => a.name.localeCompare(b.name));
+      rules.sort((a, b) => a.name.localeCompare(b.name));
     if (sortOrder === "NAME_DESC")
-      rows.sort((a, b) => b.name.localeCompare(a.name));
+      rules.sort((a, b) => b.name.localeCompare(a.name));
+
+    let rows = rules.flatMap((r) => flattenBulkRule(r));
+
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      /* Keep entire rule groups whose any cell matches — searching by name
+         shouldn't drop the rule's coverage rows. Group rows by their
+         leading row (Name set) and filter as a group. */
+      const groups = [];
+      let current = null;
+      for (const row of rows) {
+        if (row.name) {
+          current = { lead: row, rows: [row] };
+          groups.push(current);
+        } else if (current) {
+          current.rows.push(row);
+        }
+      }
+      rows = groups
+        .filter((g) =>
+          g.rows.some((r) =>
+            [r.name, r.country, r.zone]
+              .some((v) => String(v || "").toLowerCase().includes(q)),
+          ),
+        )
+        .flatMap((g) => g.rows);
+    }
+
     return rows;
-  }, [bulkMode, zones, searchQuery, filterType, sortOrder]);
+  }, [bulkMode, bulkRules, searchQuery, filterType, sortOrder]);
 
   const filteredZones = useMemo(() => {
     let result = zones.map((z) => ({

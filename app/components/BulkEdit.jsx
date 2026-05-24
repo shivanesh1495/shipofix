@@ -5,7 +5,7 @@
  * Empty Logic # rows are skipped — existing rules stay untouched.
  */
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useFetcher } from "react-router";
 import {
   Badge,
@@ -179,29 +179,36 @@ export default function BulkEdit({
   }, [deleteFetcher]);
 
   /* Surface delete result via the same toast pipe (don't navigate — staying
-     on the Bulk Edit tab is the right thing here). */
-  if (
-    deleteFetcher.state === "idle" &&
-    deleteFetcher.data &&
-    deleteFetcher.data !== lastDeleteData
-  ) {
+     on the Bulk Edit tab is the right thing here). Effect, not render-time,
+     so we don't update the parent component while this one is rendering. */
+  useEffect(() => {
+    if (
+      deleteFetcher.state !== "idle" ||
+      !deleteFetcher.data ||
+      deleteFetcher.data === lastDeleteData
+    ) {
+      return;
+    }
     setLastDeleteData(deleteFetcher.data);
     if (deleteFetcher.data.message && onToast) onToast(deleteFetcher.data.message);
     if (deleteFetcher.data.error && onToast) onToast(`Error: ${deleteFetcher.data.error}`);
-  }
+  }, [deleteFetcher.state, deleteFetcher.data, lastDeleteData, onToast]);
 
-  // Surface result state when fetcher settles
-  if (
-    fetcher.state === "idle" &&
-    fetcher.data &&
-    fetcher.data !== lastResult
-  ) {
+  // Surface upload result when fetcher settles (also an effect for the same reason).
+  useEffect(() => {
+    if (
+      fetcher.state !== "idle" ||
+      !fetcher.data ||
+      fetcher.data === lastResult
+    ) {
+      return;
+    }
     setLastResult(fetcher.data);
     setFile(null);
     if (fetcher.data.message && onToast) onToast(fetcher.data.message);
     if (fetcher.data.error && onToast) onToast(`Error: ${fetcher.data.error}`);
     if (fetcher.data.success && onApplied) onApplied();
-  }
+  }, [fetcher.state, fetcher.data, lastResult, onToast, onApplied]);
 
   const uploading =
     fetcher.state === "submitting" || fetcher.state === "loading";
@@ -386,11 +393,11 @@ export default function BulkEdit({
           </InlineStack>
           <Text tone="subdued">
             One row per official country / region — Country and Zone columns
-            pre-filled as reference. The <b>Name</b> column is blank with a
-            dropdown of your Shopify shipping zones; rule columns (Logic #,
-            Currency, Min, Max, Rate) are blank too. Fill in only the rows you
-            need. The bundled <b>All Regions</b> sheet lists every country and
-            its states / provinces / divisions.
+            pre-filled as reference. The <b>Name</b> column is free-form;
+            type whatever zone name you want each row to apply to. Rule
+            columns (Logic #, Currency, Min, Max, Rate) are blank too. Fill
+            in only the rows you need. The bundled <b>All Regions</b> sheet
+            lists every country and its states / provinces / divisions.
           </Text>
         </BlockStack>
       </Card>

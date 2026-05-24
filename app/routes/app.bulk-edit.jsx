@@ -3,11 +3,15 @@
  * Bulk Edit resource route.
  *
  * GET  /app/bulk-edit?intent=template   → download .xlsx template
- * POST /app/bulk-edit                   → upload filled .xlsx, upsert ZoneRule rows
+ * POST /app/bulk-edit                   → upload filled .xlsx, upsert BulkEditRule rows
  *
- * Intentionally additive: does not modify any existing zone/rule code paths.
- * Rows where Logic # is blank are skipped — existing rules for those zones
- * keep working untouched.
+ * Excel semantics:
+ *   - Name column = rule name (free-form, vendor's choice).
+ *   - Rows sharing the same Name belong to ONE rule.
+ *   - Country/Zone cells across those rows = the rule's coverage (union).
+ *     Empty Zone = whole country. "Rest of World" = catch-all.
+ *   - Logic #, Currency, and the rate value(s) are taken from the rule's
+ *     filled rows (first non-blank wins for Logic / Currency).
  */
 
 import * as XLSX from "xlsx";
@@ -53,7 +57,7 @@ const INSTRUCTIONS_ROWS = [
   ["Shipofix · Bulk Edit Template"],
   [],
   ["Sheet layout"],
-  ["• Name      — your Shopify shipping zone name. Pick one from the dropdown."],
+  ["• Name      — the shipping zone name this row applies to. Free-form; type any value."],
   ["• Country   — country this row applies to (pre-filled as reference)."],
   ["• Zone      — specific state / province / division (pre-filled, blank for countries with none)."],
   ["• Logic #   — 1-6 picks the rate model, 0 = reset to Shopify Default, blank = no change."],
@@ -63,7 +67,7 @@ const INSTRUCTIONS_ROWS = [
   [],
   ["How to fill the template"],
   ["1.  Country and Zone columns are pre-populated with every official country/region. They're informational and ignored on upload — leave them as-is."],
-  ["2.  For each row you want to apply, pick a Name from the dropdown (your existing Shopify zones)."],
+  ["2.  For each row you want to apply, type the zone Name in column A. Must match an existing Shopify shipping zone exactly — unknown names are skipped on upload."],
   ["3.  Set Logic # and Currency on the FIRST row of each zone. Leave them blank on other rows of the same zone."],
   ["4.  For types 1, 4, 5, 6 — put the Rate on the first row of the zone."],
   ["5.  For types 2 & 3 — fill Min / Max / Rate per band. Bands can share zone rows or be added as new rows with the same Name."],
@@ -84,6 +88,80 @@ const INSTRUCTIONS_ROWS = [
   ["• Bulk Edit never creates or deletes zones — manage zones from the dashboard."],
   ["• The All Regions sheet lists every country and its states/provinces for reference."],
 ];
+
+/* Parse helpers for the Country / Zone cells the vendor types or picks
+   from the dropdown. Tolerates "India (IN)", "IN", or "Rest of World". */
+function parseCountryCell(value) {
+  if (value === null || value === undefined) return null;
+  const s = String(value).trim();
+  if (!s) return null;
+  if (/^rest of world$/i.test(s)) return { restOfWorld: true };
+  const paren = s.match(/\(([A-Za-z0-9]{2,})\)\s*$/);
+  if (paren) {
+    return {
+      restOfWorld: false,
+      countryCode: paren[1].toUpperCase(),
+      name: s.replace(/\s*\([A-Za-z0-9]{2,}\)\s*$/, "").trim(),
+    };
+  }
+  if (/^[A-Za-z]{2}$/.test(s)) {
+    return { restOfWorld: false, countryCode: s.toUpperCase(), name: s.toUpperCase() };
+  }
+  return null;
+}
+
+function parseProvinceCell(value) {
+  if (value === null || value === undefined) return null;
+  const s = String(value).trim();
+  if (!s) return null;
+  const paren = s.match(/\(([A-Za-z0-9-]+)\)\s*$/);
+  if (paren) {
+    return {
+      code: paren[1].toUpperCase(),
+      name: s.replace(/\s*\([A-Za-z0-9-]+\)\s*$/, "").trim(),
+    };
+  }
+  return { code: s.toUpperCase(), name: s };
+}
+
+/* Synthetic delivery-zone GID for bulk rules. Stable per rule name so
+   re-uploading the same name updates the same row instead of duplicating. */
+function ruleNameToGid(name) {
+  const slug = String(name)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return `bulk:${slug || "unnamed"}`;
+}
+
+/* Shape the in-memory coverage map into the same JSON the carrier service
+   already knows how to read (parseZoneCoverage in shipping.utils.js). */
+function coverageToCountriesArray(g) {
+  const arr = [];
+  for (const [cc, entry] of g.coverage.entries()) {
+    arr.push({
+      countryCode: cc,
+      name: entry.name,
+      restOfWorld: false,
+      provinces: entry.fullCountry
+        ? []
+        : Array.from(entry.provincesByCode.entries()).map(([code, name]) => ({
+            code,
+            name,
+          })),
+    });
+  }
+  if (g.hasRestOfWorld) {
+    arr.push({
+      countryCode: "",
+      name: "Rest of World",
+      restOfWorld: true,
+      provinces: [],
+    });
+  }
+  return arr;
+}
 
 /* Format helpers — embed the ISO codes inline so vendors see them while editing */
 function fmtCountryLabel(country) {
@@ -127,6 +205,9 @@ export const loader = async ({ request }) => {
      regenerate the template from scratch. */
   if (intent === "last") {
     const { session } = await authenticate.admin(request);
+    if (!prisma.bulkEditUpload) {
+      return new Response("Storage not initialised", { status: 503 });
+    }
     const last = await prisma.bulkEditUpload.findUnique({
       where: { shop: session.shop },
     });
@@ -180,12 +261,6 @@ export const loader = async ({ request }) => {
   const sortedCountries = [...ALL_COUNTRIES].sort((a, b) =>
     a.name.localeCompare(b.name),
   );
-
-  /* Names of the shop's existing Shopify zones — used as the Name column
-     dropdown so vendors pick an existing zone instead of typing one. */
-  const zoneNames = Array.from(zoneMap.values())
-    .map((z) => z.name)
-    .sort((a, b) => a.localeCompare(b));
 
   /* Build Bulk Edit sheet rows from the full official country/province list
      (NOT from the shop's configured zones). Country and Zone are pre-filled
@@ -257,12 +332,12 @@ export const loader = async ({ request }) => {
   ];
   INSTRUCTIONS_ROWS.forEach((r) => wsInfo.addRow(r));
 
-  /* Sheet 4: Lists — hidden helper holding the exact dropdown values for
-     the Name, Country and Zone columns. Kept on its own sheet so the
-     All Regions reference view stays clean for humans. */
+  /* Sheet 4: Lists — hidden helper holding the dropdown values for the
+     Country and Zone columns. Kept on its own sheet so the All Regions
+     reference view stays clean for humans. Name (column A in Bulk Edit) is
+     intentionally free-form, so no Name list lives here. */
   const wsLists = wb.addWorksheet("Lists", { state: "hidden" });
   wsLists.columns = [
-    { header: "Name", width: 36 },
     { header: "Country", width: 36 },
     { header: "Zone", width: 36 },
   ];
@@ -276,29 +351,18 @@ export const loader = async ({ request }) => {
     });
   }
   countryLabels.push("Rest of World");
-  const maxLen = Math.max(
-    zoneNames.length,
-    countryLabels.length,
-    provinceLabels.length,
-  );
+  const maxLen = Math.max(countryLabels.length, provinceLabels.length);
   for (let i = 0; i < maxLen; i++) {
-    wsLists.addRow([
-      zoneNames[i] || "",
-      countryLabels[i] || "",
-      provinceLabels[i] || "",
-    ]);
+    wsLists.addRow([countryLabels[i] || "", provinceLabels[i] || ""]);
   }
 
   /* Named ranges so the dropdown formulas stay readable */
-  if (zoneNames.length > 0) {
-    wb.definedNames.add(`Lists!$A$2:$A$${zoneNames.length + 1}`, "ValidNames");
-  }
   wb.definedNames.add(
-    `Lists!$B$2:$B$${countryLabels.length + 1}`,
+    `Lists!$A$2:$A$${countryLabels.length + 1}`,
     "ValidCountries",
   );
   wb.definedNames.add(
-    `Lists!$C$2:$C$${provinceLabels.length + 1}`,
+    `Lists!$B$2:$B$${provinceLabels.length + 1}`,
     "ValidZones",
   );
 
@@ -370,6 +434,9 @@ export const action = async ({ request }) => {
   /* Drop the stored last-upload file (vendor-initiated cleanup). Doesn't touch
      any zone rules — only the cached file. */
   if (intent === "delete_last") {
+    if (!prisma.bulkEditUpload) {
+      return { success: true, message: "Stored upload removed." };
+    }
     await prisma.bulkEditUpload.deleteMany({ where: { shop: shopDomain } });
     return { success: true, message: "Stored upload removed." };
   }
@@ -443,84 +510,102 @@ export const action = async ({ request }) => {
   /* Replace semantics, scoped to the bulk-edit ruleset only. Zone-wise
      rules in ZoneRule are untouched so toggling Bulk Edit off later brings
      them back exactly as they were. */
+  if (!prisma.bulkEditRule || !prisma.bulkEditUpload) {
+    return {
+      success: false,
+      error:
+        "Bulk Edit storage isn't initialised yet. Stop the dev server, run `npx prisma generate`, then restart and try again.",
+    };
+  }
   const wipedCount = await prisma.bulkEditRule.deleteMany({
     where: { shop: shopDomain },
   });
 
-  /* Resolve existing zones for this shop (by name) */
-  const zoneRes = await admin.graphql(QUERY_DELIVERY_ZONES);
-  const zoneJson = await zoneRes.json();
-  const profiles = zoneJson?.data?.deliveryProfiles?.edges || [];
-  const zonesByName = new Map();
-  profiles.forEach(({ node: profile }) => {
-    profile.profileLocationGroups.forEach((group) => {
-      group.locationGroupZones.edges.forEach(({ node: zoneNode }) => {
-        const z = zoneNode.zone;
-        if (!zonesByName.has(z.name)) {
-          zonesByName.set(z.name, {
-            id: z.id,
-            countries: z.countries.map((c) => ({
-              countryCode: c.code.countryCode,
-              name: c.name,
-              restOfWorld: !!c.code.restOfWorld,
-              provinces: c.provinces || [],
-            })),
-          });
-        }
-      });
-    });
-  });
-
-  /* Group data rows by zone name.
-     Columns: 0=Name 1=Country 2=Zone 3=Logic# 4=Currency 5=Min 6=Max 7=Rate
-     Country & Zone columns are informational only and ignored here. */
+  /* Group rows by rule Name. A rule's coverage is the UNION of every
+     Country/Zone cell that appears under that Name. */
   const groups = new Map();
   for (let i = 1; i < rawRows.length; i++) {
     const r = rawRows[i];
-    const zoneName = String(r[0] || "").trim();
-    if (!zoneName) continue;
-    const logicStr = String(r[3] ?? "").trim();
-    const currency = String(r[4] || "").trim();
-    const min = r[5];
-    const max = r[6];
-    const rate = r[7];
+    const name = String(r[0] || "").trim();
+    if (!name) continue;
 
-    if (!groups.has(zoneName)) {
-      groups.set(zoneName, { logicNum: null, currency: "", bands: [] });
+    if (!groups.has(name)) {
+      groups.set(name, {
+        name,
+        logicNum: null,
+        currency: "",
+        coverage: new Map(),   // countryCode -> { name, fullCountry, provincesByCode: Map }
+        hasRestOfWorld: false,
+        bands: [],
+      });
     }
-    const g = groups.get(zoneName);
+    const g = groups.get(name);
 
+    const logicStr = String(r[3] ?? "").trim();
     if (logicStr !== "" && g.logicNum === null) {
       const n = Number(logicStr);
       if (Number.isFinite(n)) g.logicNum = n;
     }
+    const currency = String(r[4] || "").trim();
     if (currency && !g.currency) g.currency = currency.toUpperCase();
-    /* Only collect rows that actually carry rate data; country-only rows are skipped */
+
+    /* Coverage: Country / Zone columns */
+    const cParsed = parseCountryCell(r[1]);
+    if (cParsed) {
+      if (cParsed.restOfWorld) {
+        g.hasRestOfWorld = true;
+      } else {
+        const cc = cParsed.countryCode;
+        if (!g.coverage.has(cc)) {
+          g.coverage.set(cc, {
+            name: cParsed.name || cc,
+            fullCountry: false,
+            provincesByCode: new Map(),
+          });
+        }
+        const entry = g.coverage.get(cc);
+        const pParsed = parseProvinceCell(r[2]);
+        if (pParsed) {
+          entry.provincesByCode.set(pParsed.code, pParsed.name || pParsed.code);
+        } else {
+          /* Country with no Zone listed → cover the whole country */
+          entry.fullCountry = true;
+        }
+      }
+    }
+
+    /* Bands: any row that carries rate data contributes. Track the row's
+       Country / Province so non-range types can build per-destination
+       overrides; range types ignore the location fields. */
+    const min = r[5];
+    const max = r[6];
+    const rate = r[7];
     const nonEmpty = (v) => v !== "" && v !== null && v !== undefined;
     if (nonEmpty(rate) || nonEmpty(min) || nonEmpty(max)) {
-      g.bands.push({ min, max, rate });
+      const pParsedForBand = parseProvinceCell(r[2]);
+      g.bands.push({
+        min,
+        max,
+        rate,
+        countryCode: cParsed?.restOfWorld
+          ? null
+          : cParsed?.countryCode || null,
+        province: pParsedForBand?.code || null,
+      });
     }
   }
 
   /* Apply changes */
   const summary = { updated: 0, reset: 0, skipped: 0, errors: [] };
 
-  for (const [zoneName, g] of groups.entries()) {
+  for (const [name, g] of groups.entries()) {
     /* Logic # blank → skip (keep existing rule untouched) */
     if (g.logicNum === null) {
       summary.skipped += 1;
       continue;
     }
 
-    const zone = zonesByName.get(zoneName);
-    if (!zone) {
-      summary.errors.push(`Unknown zone "${zoneName}" — ignored.`);
-      continue;
-    }
-
-    /* Logic # = 0 → leave zone with no bulk-edit rule (falls back to
-       Shopify Default while Bulk Edit is on). The wipe above already
-       removed it; just track for the summary. */
+    /* Logic # = 0 → reset (the wipe above already removed it) */
     if (g.logicNum === 0) {
       summary.reset += 1;
       continue;
@@ -529,33 +614,27 @@ export const action = async ({ request }) => {
     const logicType = LOGIC_BY_NUMBER[g.logicNum];
     if (!logicType) {
       summary.errors.push(
-        `Zone "${zoneName}": Logic # ${g.logicNum} is not a valid type (use 1-6, or 0 to reset).`,
+        `Rule "${name}": Logic # ${g.logicNum} is not a valid type (use 1-6, or 0 to reset).`,
       );
       continue;
     }
 
-    /* Fall back to the zone's previous bulk-edit currency if blank, then
-       to the zone-wise rule's currency, then to INR. */
-    const [prevBulk, prevZone] = await Promise.all([
-      prisma.bulkEditRule.findUnique({
-        where: {
-          shop_deliveryZoneGid: {
-            shop: shopDomain,
-            deliveryZoneGid: zone.id,
-          },
-        },
-      }),
-      prisma.zoneRule.findUnique({
-        where: {
-          shop_deliveryZoneGid: {
-            shop: shopDomain,
-            deliveryZoneGid: zone.id,
-          },
-        },
-      }),
-    ]);
-    const currency =
-      g.currency || prevBulk?.currency || prevZone?.currency || "INR";
+    /* A rule needs at least one country or Rest of World to be matchable */
+    if (g.coverage.size === 0 && !g.hasRestOfWorld) {
+      summary.errors.push(
+        `Rule "${name}": no Country listed — add at least one country (or "Rest of World").`,
+      );
+      continue;
+    }
+
+    /* Currency: explicit > previous upsert > INR */
+    const gid = ruleNameToGid(name);
+    const prevBulk = await prisma.bulkEditRule.findUnique({
+      where: {
+        shop_deliveryZoneGid: { shop: shopDomain, deliveryZoneGid: gid },
+      },
+    });
+    const currency = g.currency || prevBulk?.currency || "INR";
 
     /* Build rules JSON for the chosen logic type */
     let rulesJson;
@@ -566,13 +645,35 @@ export const action = async ({ request }) => {
       return Number.isFinite(n) ? n : null;
     };
 
+    /* Split bands into "location-bound" (have Country and/or Province) and
+       "unbound" (no location → applies as the rule-wide default). The
+       location-bound ones become per-destination overrides. Last write
+       wins per (country, province) key so re-entering a row updates it. */
+    const buildNonRangeRate = () => {
+      const rated = g.bands.filter((b) => num(b.rate) !== null);
+      if (rated.length === 0) return null;
+      const unbound = rated.find((b) => !b.countryCode);
+      const fallbackRate = num((unbound || rated[0]).rate);
+      const overrideMap = new Map();
+      for (const b of rated) {
+        if (!b.countryCode) continue;
+        const key = `${b.countryCode}::${b.province || ""}`;
+        const entry = { countryCode: b.countryCode, rate: num(b.rate) };
+        if (b.province) entry.province = b.province;
+        overrideMap.set(key, entry);
+      }
+      return { rate: fallbackRate, overrides: Array.from(overrideMap.values()) };
+    };
+
     if (logicType === "STANDARD_TIER") {
-      const flat = num(firstBand.rate);
-      if (flat === null) {
-        summary.errors.push(`Zone "${zoneName}": Rate is required for Standard Flat Tier.`);
+      const built = buildNonRangeRate();
+      if (built === null) {
+        summary.errors.push(`Rule "${name}": Rate is required for Standard Flat Tier.`);
         continue;
       }
-      rulesJson = JSON.stringify({ flat_rate: flat });
+      const payload = { flat_rate: built.rate };
+      if (built.overrides.length) payload.overrides = built.overrides;
+      rulesJson = JSON.stringify(payload);
     } else if (logicType === "WEIGHT_RANGE") {
       const bands = g.bands
         .map((b) => {
@@ -584,7 +685,7 @@ export const action = async ({ request }) => {
         })
         .filter(Boolean);
       if (bands.length === 0) {
-        summary.errors.push(`Zone "${zoneName}": Weight Based needs at least one row with Rate filled.`);
+        summary.errors.push(`Rule "${name}": Weight Based needs at least one row with Rate filled.`);
         continue;
       }
       rulesJson = JSON.stringify(bands);
@@ -599,49 +700,52 @@ export const action = async ({ request }) => {
         })
         .filter(Boolean);
       if (bands.length === 0) {
-        summary.errors.push(`Zone "${zoneName}": Price Based needs at least one row with Rate filled.`);
+        summary.errors.push(`Rule "${name}": Price Based needs at least one row with Rate filled.`);
         continue;
       }
       rulesJson = JSON.stringify(bands);
     } else if (logicType === "WEIGHT_MULTIPLIER") {
-      const r = num(firstBand.rate);
-      if (r === null) {
-        summary.errors.push(`Zone "${zoneName}": Per KG Dynamic needs a Rate value.`);
+      const built = buildNonRangeRate();
+      if (built === null) {
+        summary.errors.push(`Rule "${name}": Per KG Dynamic needs a Rate value.`);
         continue;
       }
-      rulesJson = JSON.stringify({ rate_per_kg: r });
+      const payload = { rate_per_kg: built.rate };
+      if (built.overrides.length) payload.overrides = built.overrides;
+      rulesJson = JSON.stringify(payload);
     } else if (logicType === "PRICE_MULTIPLIER") {
-      const r = num(firstBand.rate);
-      if (r === null) {
-        summary.errors.push(`Zone "${zoneName}": Per Price Dynamic needs a Rate (decimal, e.g. 0.1).`);
+      const built = buildNonRangeRate();
+      if (built === null) {
+        summary.errors.push(`Rule "${name}": Per Price Dynamic needs a Rate (decimal, e.g. 0.1).`);
         continue;
       }
-      rulesJson = JSON.stringify({ percentage: r });
+      const payload = { percentage: built.rate };
+      if (built.overrides.length) payload.overrides = built.overrides;
+      rulesJson = JSON.stringify(payload);
     } else if (logicType === "ITEM_MULTIPLIER") {
-      const r = num(firstBand.rate);
-      if (r === null) {
-        summary.errors.push(`Zone "${zoneName}": Per Item Dynamic needs a Rate per item.`);
+      const built = buildNonRangeRate();
+      if (built === null) {
+        summary.errors.push(`Rule "${name}": Per Item Dynamic needs a Rate per item.`);
         continue;
       }
-      rulesJson = JSON.stringify({ rate_per_item: r });
+      const payload = { rate_per_item: built.rate };
+      if (built.overrides.length) payload.overrides = built.overrides;
+      rulesJson = JSON.stringify(payload);
     } else {
       summary.skipped += 1;
       continue;
     }
 
-    const countries = JSON.stringify(zone.countries);
+    const countries = JSON.stringify(coverageToCountriesArray(g));
     await prisma.bulkEditRule.upsert({
       where: {
-        shop_deliveryZoneGid: {
-          shop: shopDomain,
-          deliveryZoneGid: zone.id,
-        },
+        shop_deliveryZoneGid: { shop: shopDomain, deliveryZoneGid: gid },
       },
-      update: { name: zoneName, countries, logicType, rulesJson, currency },
+      update: { name, countries, logicType, rulesJson, currency },
       create: {
         shop: shopDomain,
-        deliveryZoneGid: zone.id,
-        name: zoneName,
+        deliveryZoneGid: gid,
+        name,
         countries,
         logicType,
         rulesJson,
@@ -675,7 +779,7 @@ export const action = async ({ request }) => {
   const skippedOrReset = summary.reset + summary.skipped;
   const parts = [];
   if (summary.updated) parts.push(`${summary.updated} bulk rule${summary.updated === 1 ? "" : "s"} created`);
-  if (skippedOrReset) parts.push(`${skippedOrReset} zone${skippedOrReset === 1 ? "" : "s"} left on default`);
+  if (skippedOrReset) parts.push(`${skippedOrReset} rule${skippedOrReset === 1 ? "" : "s"} left on default`);
   if (wipedCount.count) parts.push(`${wipedCount.count} previous bulk rule${wipedCount.count === 1 ? "" : "s"} replaced`);
   const message =
     summary.updated === 0 && skippedOrReset === 0

@@ -169,8 +169,33 @@ export const action = async ({ request }) => {
 
     await log({ event: "MATCH_SUCCESS", ruleName: matchedRule.name, gid: matchedRule.deliveryZoneGid, logicType: matchedRule.logicType, score: matchedScore });
 
-    /* ── Rate calculation via strategy ── */
+    /* ── Rate calculation via strategy ──
+       Non-range rules can carry `overrides` — a list of per-destination
+       rates that replace the default for the matched country/province.
+       Range types (band lists) don't use overrides; their array shape
+       has no `.overrides` field. */
     const rules = JSON.parse(matchedRule.rulesJson || "{}");
+    if (!Array.isArray(rules) && Array.isArray(rules.overrides)) {
+      const exact = rules.overrides.find(
+        (o) =>
+          o.countryCode === destinationCountry &&
+          o.province && o.province === destinationProvince,
+      );
+      const countryLevel = rules.overrides.find(
+        (o) => o.countryCode === destinationCountry && !o.province,
+      );
+      const ov = exact || countryLevel;
+      if (ov && Number.isFinite(Number(ov.rate))) {
+        const r = Number(ov.rate);
+        switch (matchedRule.logicType) {
+          case "STANDARD_TIER": rules.flat_rate = r; break;
+          case "WEIGHT_MULTIPLIER": rules.rate_per_kg = r; break;
+          case "PRICE_MULTIPLIER": rules.percentage = r; break;
+          case "ITEM_MULTIPLIER": rules.rate_per_item = r; break;
+        }
+        await log({ event: "RATE_OVERRIDE_APPLIED", country: destinationCountry, province: destinationProvince, rate: r });
+      }
+    }
     const result = calculateRate(matchedRule.logicType, rules, totalKg, totalPrice, totalItems);
 
     if (!result) {

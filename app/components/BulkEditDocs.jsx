@@ -159,12 +159,15 @@ export default function BulkEditDocs({ open, onClose }) {
                 <ul>
                   <li>
                     Logic <b>1, 4, 5, 6</b> — put the value in the Rate column
-                    on the Bulk Edit sheet.
+                    on the Bulk Edit sheet. Leave the Rate column blank for
+                    Logic 2 & 3 rules.
                   </li>
                   <li>
                     Logic <b>2, 3</b> — switch to the <b>Rate Bands</b> sheet
-                    and add one row per slab (Name, Min, Max, Rate). Order
-                    doesn&apos;t matter; the carrier picks the matching band.
+                    and add one row per slab (Name, Min, Max, Rate).{" "}
+                    <b>Required:</b> upload is rejected if a Logic 2 / 3 rule
+                    has no Rate Bands rows. Order doesn&apos;t matter; the
+                    carrier picks the matching band.
                   </li>
                 </ul>
               </li>
@@ -295,6 +298,16 @@ export default function BulkEditDocs({ open, onClose }) {
             </Text>
             <ul className="bulk-docs-edges">
               <li>
+                <b>Logic 2 / 3 with no Rate Bands rows</b> → upload is{" "}
+                <b>rejected</b> with a row-level error naming the rule. Add at
+                least one row on the Rate Bands sheet with the same Name.
+              </li>
+              <li>
+                <b>Logic 1 / 4 / 5 / 6 with no Rate on Bulk Edit</b> → upload is
+                rejected for that rule. Fill the Rate column on the rule&apos;s
+                first row.
+              </li>
+              <li>
                 <b>Blank Min</b> on a Rate Bands row → treated as 0.
               </li>
               <li>
@@ -310,9 +323,8 @@ export default function BulkEditDocs({ open, onClose }) {
                 case-sensitive.
               </li>
               <li>
-                <b>Bands assigned to a Logic 1 / 4 / 5 / 6 rule</b> → only the
-                first rate value is used as the rule&apos;s rate; Min/Max are
-                ignored.
+                <b>Rate Bands rows for a Logic 1 / 4 / 5 / 6 rule</b> → ignored.
+                Those rules read the rate from the Bulk Edit Rate column only.
               </li>
               <li>
                 <b>No coverage for a rule</b> (Name appears on Rate Bands but

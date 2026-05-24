@@ -45,8 +45,6 @@ const TEMPLATE_HEADERS = [
   "Zone",
   "Logic #",
   "Currency",
-  "Min",
-  "Max",
   "Rate",
 ];
 
@@ -61,8 +59,8 @@ const INSTRUCTIONS_ROWS = [
   ["Workflow in one minute"],
   ["1. Coverage  → on the 'Bulk Edit' sheet, mark which countries / zones a rule covers by typing the rule Name in column A."],
   ["2. Logic     → on that same first row of the rule, set Logic # and Currency."],
-  ["3. Rate      → for Logic 1, 4, 5, 6 put the rate on the Bulk Edit sheet itself."],
-  ["               for Logic 2 & 3 (category slabs) use the dedicated 'Rate Bands' sheet — one row per band, same Name."],
+  ["3. Rate      → for Logic 1, 4, 5, 6 put the rate in the Rate column on the Bulk Edit sheet."],
+  ["               for Logic 2 & 3 (category slabs) the rate lives on the dedicated 'Rate Bands' sheet — one row per band, same Name."],
   ["4. Save the file and upload it back into the Bulk Edit panel."],
   [],
   ["'Bulk Edit' sheet columns"],
@@ -71,26 +69,25 @@ const INSTRUCTIONS_ROWS = [
   ["• Zone      — state / province / division (dropdown; blank = whole country)."],
   ["• Logic #   — 1-6 picks the rate model, 0 = reset to Shopify Default, blank = no change."],
   ["• Currency  — ISO code (e.g. INR, USD). Defaults to INR if blank."],
-  ["• Min/Max   — only needed for Logic 2 & 3 if you prefer to keep bands on this sheet. Recommended: use the Rate Bands sheet instead."],
-  ["• Rate      — flat rate (1) / per-kg (4) / decimal % (5) / per-item (6). Leave blank for 2 & 3 (defined on Rate Bands)."],
+  ["• Rate      — Logic 1 (flat) / 4 (per kg) / 5 (decimal %, e.g. 0.1) / 6 (per item). LEAVE BLANK for Logic 2 & 3 — those rates come from the Rate Bands sheet."],
   [],
-  ["'Rate Bands' sheet — for category logic (Logic 2 & 3)"],
-  ["• Each row is ONE band of a rule."],
+  ["'Rate Bands' sheet — REQUIRED for Logic 2 & 3"],
+  ["• Each row is ONE band of a rule. Logic 2 & 3 rules with no rows on this sheet will be REJECTED on upload."],
   ["• Name   — must match the rule Name used on the Bulk Edit sheet (case-sensitive)."],
-  ["• Min    — lower bound of the band. Use 0 for the first band."],
+  ["• Min    — lower bound of the band. Leave blank to mean 0."],
   ["• Max    — upper bound. Leave blank for the open-ended top band (= ∞)."],
   ["• Rate   — flat amount charged when the cart falls inside this band."],
   ["• Add as many rows as you need per rule. Order doesn't matter — the carrier picks the matching band by Min ≤ value < Max."],
   ["• Logic 2 reads the cart's total weight in kg. Logic 3 reads the cart total in the rule's currency."],
-  ["• Edge cases: Min defaults to 0 if blank, Max blank = ∞. Rows without a Rate are dropped. Bands assigned to a Name that has no Logic 2 / 3 rule on Bulk Edit are ignored."],
+  ["• Edge cases: rows without a Rate are dropped. Bands assigned to a Name that has no Logic 2 / 3 rule on Bulk Edit are ignored."],
   [],
   ["Examples"],
-  ["Logic 1 (Flat) — single row on Bulk Edit:"],
-  ["", "Express AU", "Australia (AU)", "", 1, "AUD", "", "", 25],
+  ["Logic 1 (Flat) — single row on Bulk Edit, Rate filled:"],
+  ["", "Express AU", "Australia (AU)", "", 1, "AUD", 25],
   [],
-  ["Logic 2 (Weight bands) — coverage on Bulk Edit + bands on Rate Bands sheet:"],
+  ["Logic 2 (Weight bands) — coverage on Bulk Edit (Rate blank) + bands on Rate Bands sheet:"],
   ["Bulk Edit row:"],
-  ["", "Weight AU", "Australia (AU)", "", 2, "AUD"],
+  ["", "Weight AU", "Australia (AU)", "", 2, "AUD", ""],
   ["Rate Bands rows for the same Name:"],
   ["", "Name", "Min", "Max", "Rate"],
   ["", "Weight AU", 0, 5, 50],
@@ -98,13 +95,13 @@ const INSTRUCTIONS_ROWS = [
   ["", "Weight AU", 10, "", 120],
   [],
   ["Logic # reference"],
-  ["#", "Logic Type", "Min column", "Max column", "Rate column"],
-  [1, "Standard Flat Tier", "—", "—", "Flat rate"],
-  [2, "Weight Based (Category)", "Min weight (kg)", "Max weight (kg, blank = ∞)", "Rate per band"],
-  [3, "Price Based (Category)", "Min cart total", "Max cart total (blank = ∞)", "Rate per band"],
-  [4, "Per KG Dynamic", "—", "—", "Rate per kg"],
-  [5, "Per Price Dynamic", "—", "—", "Decimal % (0.1 = 10%)"],
-  [6, "Per Item Dynamic", "—", "—", "Rate per item"],
+  ["#", "Logic Type", "Where to put the rate", "Notes"],
+  [1, "Standard Flat Tier", "Bulk Edit · Rate column", "One row per zone."],
+  [2, "Weight Based (Category)", "Rate Bands sheet (one row per slab)", "Min / Max are kg. Required — error if no rows."],
+  [3, "Price Based (Category)", "Rate Bands sheet (one row per slab)", "Min / Max are cart total. Required — error if no rows."],
+  [4, "Per KG Dynamic", "Bulk Edit · Rate column", "Rate per kg."],
+  [5, "Per Price Dynamic", "Bulk Edit · Rate column", "Decimal fraction (0.1 = 10%)."],
+  [6, "Per Item Dynamic", "Bulk Edit · Rate column", "Rate per item."],
   [],
   ["Notes"],
   ["• Uploading replaces every existing bulk-edit rule for the shop — rules you leave out are reset to Shopify Default."],
@@ -146,6 +143,35 @@ function parseProvinceCell(value) {
     };
   }
   return { code: s.toUpperCase(), name: s };
+}
+
+/* Detect band overlaps and gaps within a single rule's bands. Returns a
+   list of plain-English issue strings — used as upload warnings (not hard
+   errors), since overlapping bands still work but pick whichever band the
+   carrier hits first, and gaps leave certain cart ranges uncovered. */
+function describeBandIssues(bands, unit) {
+  const norm = bands
+    .map((b) => ({
+      min: b.min == null ? 0 : Number(b.min),
+      max: b.max == null ? Infinity : Number(b.max),
+    }))
+    .sort((a, b) => a.min - b.min);
+  const fmt = (v) => (v === Infinity ? "∞" : v);
+  const issues = [];
+  for (let i = 0; i < norm.length - 1; i++) {
+    const a = norm[i];
+    const b = norm[i + 1];
+    if (a.max > b.min) {
+      issues.push(
+        `bands ${a.min}-${fmt(a.max)} ${unit} and ${b.min}-${fmt(b.max)} ${unit} overlap — checkout will use whichever band the cart hits first.`,
+      );
+    } else if (a.max < b.min) {
+      issues.push(
+        `gap between ${fmt(a.max)} ${unit} and ${b.min} ${unit} — carts inside that range will get no rate.`,
+      );
+    }
+  }
+  return issues;
 }
 
 /* Synthetic delivery-zone GID for bulk rules. Stable per rule name so
@@ -203,18 +229,19 @@ function fmtProvinceLabel(p) {
    columns are blank for the vendor to fill in. */
 function buildAllRegionRows(sortedCountries) {
   const rows = [];
+  /* COL_COUNT cells per row: Name, Country, Zone, Logic #, Currency, Rate. */
   for (const country of sortedCountries) {
     const countryLabel = fmtCountryLabel(country);
     if (!country.provinces || country.provinces.length === 0) {
-      rows.push(["", countryLabel, "", "", "", "", "", ""]);
+      rows.push(["", countryLabel, "", "", "", ""]);
     } else {
       for (const p of country.provinces) {
-        rows.push(["", countryLabel, fmtProvinceLabel(p), "", "", "", "", ""]);
+        rows.push(["", countryLabel, fmtProvinceLabel(p), "", "", ""]);
       }
     }
   }
   /* Rest of World row so vendors can target it explicitly */
-  rows.push(["", "Rest of World", "", "", "", "", "", ""]);
+  rows.push(["", "Rest of World", "", "", "", ""]);
   return rows;
 }
 
@@ -309,8 +336,6 @@ export const loader = async ({ request }) => {
     { width: 28 }, // Zone (province)
     { width: 9 },  // Logic #
     { width: 10 }, // Currency
-    { width: 12 }, // Min
-    { width: 12 }, // Max
     { width: 14 }, // Rate
   ];
   zoneRows.forEach((r) => wsZones.addRow(r));
@@ -331,6 +356,42 @@ export const loader = async ({ request }) => {
     cell.alignment = headerStyle.alignment;
   });
   wsZones.getRow(1).height = 22;
+  /* Header tooltips — hover the header cell for inline help. Keeps the docs
+     reachable without leaving Excel. */
+  wsZones.getCell("A1").note =
+    "Rule name (free-form). Rows sharing a Name merge into ONE rule; coverage is the union of their Country/Zone cells. Names are case-sensitive and must match exactly on the Rate Bands sheet.";
+  wsZones.getCell("B1").note =
+    "Country this row applies to. Pick from the dropdown. 'Rest of World' targets every country your other rules don't cover.";
+  wsZones.getCell("C1").note =
+    "State / province / division (optional). Pick from the dropdown, or leave blank to apply to the whole country.";
+  wsZones.getCell("D1").note =
+    "1 = Standard Flat Tier · 2 = Weight Based (use Rate Bands) · 3 = Price Based (use Rate Bands) · 4 = Per KG · 5 = Per Price (decimal %, e.g. 0.1) · 6 = Per Item. 0 = reset to Shopify Default. Blank = keep existing rule.";
+  wsZones.getCell("E1").note =
+    "ISO currency code (e.g. INR, USD, AUD). Defaults to INR if blank. Set once on the rule's first row.";
+  wsZones.getCell("F1").note =
+    "Rate amount for Logic 1, 4, 5, 6. LEAVE BLANK for Logic 2 & 3 — those rates come from the Rate Bands sheet.";
+
+  /* Conditional formatting: when Logic # is 2 or 3 on the same row, paint the
+     Rate cell pink so vendors immediately see they shouldn't fill it. */
+  const lastDataRow = wsZones.rowCount;
+  wsZones.addConditionalFormatting({
+    ref: `F2:F${lastDataRow}`,
+    rules: [
+      {
+        type: "expression",
+        formulae: ["OR($D2=2,$D2=3)"],
+        priority: 1,
+        style: {
+          fill: {
+            type: "pattern",
+            pattern: "solid",
+            bgColor: { argb: "FFFFE5E5" },
+          },
+          font: { color: { argb: "FFB91C1C" } },
+        },
+      },
+    ],
+  });
 
   /* Sheet 2: Rate Bands — dedicated sheet for Logic 2 / 3 slabs.
      Keeping bands out of the Bulk Edit coverage sheet lets vendors see all
@@ -352,6 +413,16 @@ export const loader = async ({ request }) => {
     cell.alignment = headerStyle.alignment;
   });
   wsBands.getRow(1).height = 22;
+  /* Header tooltips for Rate Bands. The Name note explicitly calls out the
+     case-sensitive match against the Bulk Edit sheet — easy to miss. */
+  wsBands.getCell("A1").note =
+    "Must EXACTLY match a Name on the Bulk Edit sheet (case-sensitive). Orphan names — bands whose Name doesn't appear on Bulk Edit — are rejected on upload.";
+  wsBands.getCell("B1").note =
+    "Lower bound of this band. Leave blank to mean 0. For Logic 2 this is kg; for Logic 3 it's cart total in the rule's currency.";
+  wsBands.getCell("C1").note =
+    "Upper bound of this band. Leave BLANK on the top band for the open-ended range (= ∞). Must be greater than Min.";
+  wsBands.getCell("D1").note =
+    "Flat amount charged when the cart falls inside this band.";
   /* 100 blank rows so vendors can paste large band sets without resizing */
   for (let i = 0; i < 100; i++) {
     wsBands.addRow(["", "", "", ""]);
@@ -482,6 +553,24 @@ export const loader = async ({ request }) => {
       errorTitle: "Invalid Logic #",
       error: "Logic # must be 1-6 (or 0 to reset the zone). Leave blank to keep the existing rule.",
     };
+    /* Rate (column F): combined custom validation that does TWO jobs at once.
+        - When Logic # in column D is 2 or 3 → the cell must be blank
+          (category logic reads rates from the Rate Bands sheet). errorStyle
+          'stop' makes Excel reject the entry outright.
+        - Otherwise → must be a non-negative number.
+       allowBlank lets users clear the cell freely. */
+    wsZones.getCell(`F${r}`).dataValidation = {
+      type: "custom",
+      allowBlank: true,
+      formulae: [
+        `=IF(OR($D${r}=2,$D${r}=3),FALSE,AND(ISNUMBER(F${r}),F${r}>=0))`,
+      ],
+      showErrorMessage: true,
+      errorStyle: "stop",
+      errorTitle: "Rate not allowed here",
+      error:
+        "Logic 2 & 3 (category-based) read rates from the 'Rate Bands' sheet — leave Rate BLANK on this sheet for those rules. For Logic 1, 4, 5, 6 enter a non-negative number.",
+    };
   }
 
   const buffer = await wb.xlsx.writeBuffer();
@@ -592,7 +681,8 @@ export const action = async ({ request }) => {
 
   /* Replace semantics, scoped to the bulk-edit ruleset only. Zone-wise
      rules in ZoneRule are untouched so toggling Bulk Edit off later brings
-     them back exactly as they were. */
+     them back exactly as they were. The wipe is deferred until AFTER full
+     validation succeeds — if any rule has an error, nothing is touched. */
   if (!prisma.bulkEditRule || !prisma.bulkEditUpload) {
     return {
       success: false,
@@ -600,9 +690,6 @@ export const action = async ({ request }) => {
         "Bulk Edit storage isn't initialised yet. Stop the dev server, run `npx prisma generate`, then restart and try again.",
     };
   }
-  const wipedCount = await prisma.bulkEditRule.deleteMany({
-    where: { shop: shopDomain },
-  });
 
   /* Group rows by rule Name. A rule's coverage is the UNION of every
      Country/Zone cell that appears under that Name. */
@@ -615,25 +702,44 @@ export const action = async ({ request }) => {
     if (!groups.has(name)) {
       groups.set(name, {
         name,
-        logicNum: null,
-        currency: "",
+        /* Every Logic # encountered, deduped — used to detect conflicting
+           values entered on different rows of the same Name. */
+        logicValues: new Set(),
+        /* Every Currency encountered, deduped. */
+        currencies: new Set(),
         coverage: new Map(),   // countryCode -> { name, fullCountry, provincesByCode: Map }
         hasRestOfWorld: false,
+        /* Bulk Edit Country cells that were left blank for this rule. Helps
+           surface "Name set but no Country picked" as a precise error. */
+        blankCountryRows: 0,
+        /* Rate column entries on the Bulk Edit sheet (Logic 1 / 4 / 5 / 6). */
+        rateRows: [],
+        /* Rows from the Rate Bands sheet — bands keyed by Name (Logic 2 / 3). */
         bands: [],
+        /* Which sheets this Name appeared on. Lets us reject orphan bands
+           (Name on Rate Bands but not on Bulk Edit) with a clear message. */
+        appearsOnBulkEdit: false,
+        appearsOnRateBands: false,
       });
     }
     const g = groups.get(name);
+    g.appearsOnBulkEdit = true;
 
     const logicStr = String(r[3] ?? "").trim();
-    if (logicStr !== "" && g.logicNum === null) {
+    if (logicStr !== "") {
       const n = Number(logicStr);
-      if (Number.isFinite(n)) g.logicNum = n;
+      if (Number.isFinite(n)) g.logicValues.add(n);
     }
     const currency = String(r[4] || "").trim();
-    if (currency && !g.currency) g.currency = currency.toUpperCase();
+    if (currency) g.currencies.add(currency.toUpperCase());
 
     /* Coverage: Country / Zone columns */
     const cParsed = parseCountryCell(r[1]);
+    if (!cParsed) {
+      /* Name was set but Country is blank/garbage. Track so we can name the
+         exact offence in the error message later. */
+      g.blankCountryRows += 1;
+    }
     if (cParsed) {
       if (cParsed.restOfWorld) {
         g.hasRestOfWorld = true;
@@ -657,18 +763,15 @@ export const action = async ({ request }) => {
       }
     }
 
-    /* Bands: any row that carries rate data contributes. Track the row's
-       Country / Province so non-range types can build per-destination
-       overrides; range types ignore the location fields. */
-    const min = r[5];
-    const max = r[6];
-    const rate = r[7];
+    /* Rate column entries. For non-range logic (1/4/5/6) the row's Country /
+       Province acts as a per-destination override; the first unbound row is
+       the fallback rate. Range types (2/3) ignore this — their bands live on
+       the Rate Bands sheet. */
+    const rate = r[5];
     const nonEmpty = (v) => v !== "" && v !== null && v !== undefined;
-    if (nonEmpty(rate) || nonEmpty(min) || nonEmpty(max)) {
+    if (nonEmpty(rate)) {
       const pParsedForBand = parseProvinceCell(r[2]);
-      g.bands.push({
-        min,
-        max,
+      g.rateRows.push({
         rate,
         countryCode: cParsed?.restOfWorld
           ? null
@@ -677,6 +780,10 @@ export const action = async ({ request }) => {
       });
     }
   }
+
+  /* Pre-collect band-level row issues so we can surface them with the exact
+     spreadsheet row number the vendor will see in Excel. */
+  const bandRowErrors = [];
 
   /* Optional: dedicated Rate Bands sheet — bands keyed only by Name, with no
      country/province context. Merges into the same group's bands array.
@@ -697,95 +804,203 @@ export const action = async ({ request }) => {
        skipped via the same "no name" filter below. */
     const nonEmpty = (v) => v !== "" && v !== null && v !== undefined;
     const startIdx = bandRows.length && String(bandRows[0][0] || "").trim().toLowerCase() === "name" ? 1 : 0;
+    const toNum = (v) => {
+      if (!nonEmpty(v)) return null;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : NaN; /* NaN ≠ null distinguishes "non-numeric" from "blank" */
+    };
     for (let i = startIdx; i < bandRows.length; i++) {
       const r = bandRows[i];
       const name = String(r[0] || "").trim();
       if (!name) continue;
-      const min = r[1];
-      const max = r[2];
-      const rate = r[3];
-      /* Drop completely empty rows or rows missing a rate — a band without a
-         rate is meaningless and would otherwise inflate the band count. */
-      if (!nonEmpty(rate)) continue;
+      /* Spreadsheet row number the vendor sees (1-indexed; header is row 1). */
+      const sheetRow = i + 1;
+      const minRaw = r[1];
+      const maxRaw = r[2];
+      const rateRaw = r[3];
+      const minN = toNum(minRaw);
+      const maxN = toNum(maxRaw);
+      const rateN = toNum(rateRaw);
+
+      /* Row-level validation. Each problem becomes an actionable error
+         pinned to a specific (Name, row) so vendors can fix it fast. */
+      if (Number.isNaN(minN) || Number.isNaN(maxN) || Number.isNaN(rateN)) {
+        bandRowErrors.push(`Rate Bands row ${sheetRow} (Name "${name}"): Min / Max / Rate must be numeric. Found Min="${minRaw}", Max="${maxRaw}", Rate="${rateRaw}".`);
+        continue;
+      }
+      if (!nonEmpty(rateRaw)) {
+        /* No rate → silently dropped (vendor left it blank intentionally). */
+        continue;
+      }
+      if (rateN < 0) {
+        bandRowErrors.push(`Rate Bands row ${sheetRow} (Name "${name}"): Rate cannot be negative (got ${rateN}).`);
+        continue;
+      }
+      if (nonEmpty(minRaw) && minN < 0) {
+        bandRowErrors.push(`Rate Bands row ${sheetRow} (Name "${name}"): Min cannot be negative (got ${minN}).`);
+        continue;
+      }
+      if (nonEmpty(maxRaw) && maxN < 0) {
+        bandRowErrors.push(`Rate Bands row ${sheetRow} (Name "${name}"): Max cannot be negative (got ${maxN}).`);
+        continue;
+      }
+      if (nonEmpty(minRaw) && nonEmpty(maxRaw) && minN >= maxN) {
+        bandRowErrors.push(`Rate Bands row ${sheetRow} (Name "${name}"): Min (${minN}) must be less than Max (${maxN}). Leave Max blank for the open-ended top band.`);
+        continue;
+      }
+
       if (!groups.has(name)) {
         /* Orphan band — the rule's coverage/logic must still come from the
-           Bulk Edit sheet. Create the group so the "no coverage" error
-           below fires with the correct rule name. */
+           Bulk Edit sheet. Create the group so the orphan-name check below
+           can fire with the correct rule Name. */
         groups.set(name, {
           name,
-          logicNum: null,
-          currency: "",
+          logicValues: new Set(),
+          currencies: new Set(),
           coverage: new Map(),
           hasRestOfWorld: false,
+          blankCountryRows: 0,
+          rateRows: [],
           bands: [],
+          appearsOnBulkEdit: false,
+          appearsOnRateBands: false,
         });
       }
-      groups.get(name).bands.push({
-        min,
-        max,
-        rate,
-        countryCode: null,
-        province: null,
-      });
+      const g = groups.get(name);
+      g.appearsOnRateBands = true;
+      g.bands.push({ min: minRaw, max: maxRaw, rate: rateRaw });
     }
   }
 
-  /* Apply changes */
-  const summary = { updated: 0, reset: 0, skipped: 0, errors: [] };
+  /* Two-phase apply: VALIDATE first, then COMMIT. Every group either
+     contributes a row to rulesToWrite or pushes an error to summary.errors.
+     Nothing is written to the DB until the whole upload validates clean —
+     a single broken rule rejects the entire upload so vendors never end up
+     with a half-applied ruleset (or, worse, an empty one after a wipe). */
+  const summary = { updated: 0, reset: 0, skipped: 0, errors: [], warnings: [] };
+  const rulesToWrite = [];
+  /* Seed errors with any row-level issues already collected from the Rate
+     Bands sheet. They're processed before the per-rule loop so vendors see
+     spreadsheet row numbers alongside rule-level errors. */
+  for (const e of bandRowErrors) summary.errors.push(e);
 
   for (const [name, g] of groups.entries()) {
+    /* Orphan name — band rows reference a Name that isn't on Bulk Edit. The
+       rule can't exist without coverage, so reject with a precise message. */
+    if (!g.appearsOnBulkEdit && g.appearsOnRateBands) {
+      summary.errors.push(
+        `Rate Bands references Name "${name}" but that Name doesn't appear anywhere on the Bulk Edit sheet. Either add a Bulk Edit row with this Name (and a Country / Zone), or delete the orphan Rate Bands rows.`,
+      );
+      continue;
+    }
+
+    /* Conflicting Logic # — vendor put e.g. 2 on one row and 3 on another
+       under the same Name. Can't pick one for them, so reject. */
+    if (g.logicValues.size > 1) {
+      summary.errors.push(
+        `Rule "${name}": conflicting Logic # values (${[...g.logicValues].join(", ")}). Set the Logic # on one row of the rule and leave it blank on the others.`,
+      );
+      continue;
+    }
+
+    /* Conflicting Currency — same reason. */
+    if (g.currencies.size > 1) {
+      summary.errors.push(
+        `Rule "${name}": conflicting Currency values (${[...g.currencies].join(", ")}). Set Currency on one row of the rule and leave it blank on the others.`,
+      );
+      continue;
+    }
+
+    const logicNum = g.logicValues.size === 1 ? [...g.logicValues][0] : null;
+
     /* Logic # blank → skip (keep existing rule untouched) */
-    if (g.logicNum === null) {
+    if (logicNum === null) {
       summary.skipped += 1;
       continue;
     }
 
-    /* Logic # = 0 → reset (the wipe above already removed it) */
-    if (g.logicNum === 0) {
+    /* Logic # = 0 → reset (the wipe above already removed it). Warn if the
+       vendor also filled a Rate or bands — those will be discarded. */
+    if (logicNum === 0) {
       summary.reset += 1;
+      if (g.rateRows.length || g.bands.length) {
+        summary.warnings.push(
+          `Rule "${name}": Logic # 0 (reset) — Rate / Rate Bands rows for this rule were discarded.`,
+        );
+      }
       continue;
     }
 
-    const logicType = LOGIC_BY_NUMBER[g.logicNum];
+    const logicType = LOGIC_BY_NUMBER[logicNum];
     if (!logicType) {
       summary.errors.push(
-        `Rule "${name}": Logic # ${g.logicNum} is not a valid type (use 1-6, or 0 to reset).`,
+        `Rule "${name}": Logic # ${logicNum} is not a valid type (use 1-6, or 0 to reset).`,
       );
       continue;
     }
 
     /* A rule needs at least one country or Rest of World to be matchable */
     if (g.coverage.size === 0 && !g.hasRestOfWorld) {
-      summary.errors.push(
-        `Rule "${name}": no Country listed — add at least one country (or "Rest of World").`,
-      );
+      if (g.blankCountryRows > 0) {
+        summary.errors.push(
+          `Rule "${name}": Name was entered on ${g.blankCountryRows} row${g.blankCountryRows === 1 ? "" : "s"} but Country is blank. Pick a Country from the dropdown on each of the rule's rows (or 'Rest of World').`,
+        );
+      } else {
+        summary.errors.push(
+          `Rule "${name}": no Country listed — add at least one country (or "Rest of World").`,
+        );
+      }
       continue;
     }
 
-    /* Currency: explicit > previous upsert > INR */
+    /* Cross-sheet sanity — HARD errors. Mixing inputs between the two
+       sheets is almost always a vendor mistake (often: Logic # flipped to
+       2 / 3 after Rate was already typed). Excel-side validation blocks
+       the typical entry path; this is the belt-and-braces server check. */
+    const isRangeLogic = logicType === "WEIGHT_RANGE" || logicType === "PRICE_RANGE";
+    if (isRangeLogic && g.rateRows.length > 0) {
+      summary.errors.push(
+        `Rule "${name}" (Logic ${logicNum}): the Rate column on the Bulk Edit sheet is filled but Logic 2 & 3 are category-based — their rates live on the Rate Bands sheet only. Clear the Rate cell on every Bulk Edit row for this rule.`,
+      );
+      continue;
+    }
+    if (!isRangeLogic && g.bands.length > 0) {
+      summary.errors.push(
+        `Rule "${name}" (Logic ${logicNum}): the Rate Bands sheet has rows for this rule, but Logic ${logicNum} reads its rate from the Bulk Edit Rate column only. Remove the Rate Bands rows for Name "${name}" (or change Logic # to 2 or 3).`,
+      );
+      continue;
+    }
+    /* Logic 5 expects a decimal (0.1 = 10%). A value > 1 is almost certainly
+       a vendor mistake (10 meaning 10%, or worse). */
+    if (logicType === "PRICE_MULTIPLIER") {
+      const firstRate = g.rateRows[0]?.rate;
+      const n = Number(firstRate);
+      if (Number.isFinite(n) && n > 1) {
+        summary.warnings.push(
+          `Rule "${name}" (Logic 5 · Per Price Dynamic): Rate is ${n}, which is read as ${n * 100}% of cart total. If you meant 10%, enter 0.1.`,
+        );
+      }
+    }
+
+    /* Currency: explicit > INR. (The previous bulk-rule row isn't consulted
+       because the apply phase wipes the whole bulk-edit ruleset before
+       writing — there's no prior currency to inherit.) */
     const gid = ruleNameToGid(name);
-    const prevBulk = await prisma.bulkEditRule.findUnique({
-      where: {
-        shop_deliveryZoneGid: { shop: shopDomain, deliveryZoneGid: gid },
-      },
-    });
-    const currency = g.currency || prevBulk?.currency || "INR";
+    const currency = [...g.currencies][0] || "INR";
 
     /* Build rules JSON for the chosen logic type */
     let rulesJson;
-    const firstBand = g.bands[0] || {};
     const num = (v) => {
       if (v === "" || v === null || v === undefined) return null;
       const n = Number(v);
       return Number.isFinite(n) ? n : null;
     };
 
-    /* Split bands into "location-bound" (have Country and/or Province) and
-       "unbound" (no location → applies as the rule-wide default). The
-       location-bound ones become per-destination overrides. Last write
-       wins per (country, province) key so re-entering a row updates it. */
+    /* Split Bulk Edit Rate rows into "location-bound" (have Country and/or
+       Province → per-destination overrides) and "unbound" (no location →
+       rule-wide default). Last write wins per (country, province) key. */
     const buildNonRangeRate = () => {
-      const rated = g.bands.filter((b) => num(b.rate) !== null);
+      const rated = g.rateRows.filter((b) => num(b.rate) !== null);
       if (rated.length === 0) return null;
       const unbound = rated.find((b) => !b.countryCode);
       const fallbackRate = num((unbound || rated[0]).rate);
@@ -803,13 +1018,17 @@ export const action = async ({ request }) => {
     if (logicType === "STANDARD_TIER") {
       const built = buildNonRangeRate();
       if (built === null) {
-        summary.errors.push(`Rule "${name}": Rate is required for Standard Flat Tier.`);
+        summary.errors.push(`Rule "${name}" (Logic 1 · Standard Flat Tier): the Rate column on the Bulk Edit sheet is empty. Put the flat amount on the rule's first row.`);
         continue;
       }
       const payload = { flat_rate: built.rate };
       if (built.overrides.length) payload.overrides = built.overrides;
       rulesJson = JSON.stringify(payload);
     } else if (logicType === "WEIGHT_RANGE") {
+      if (g.bands.length === 0) {
+        summary.errors.push(`Rule "${name}" (Logic 2 · Weight Based): no entries on the Rate Bands sheet. Logic 2 requires at least one row on Rate Bands with Name "${name}".`);
+        continue;
+      }
       const bands = g.bands
         .map((b) => {
           const min = num(b.min);
@@ -820,11 +1039,22 @@ export const action = async ({ request }) => {
         })
         .filter(Boolean);
       if (bands.length === 0) {
-        summary.errors.push(`Rule "${name}": Weight Based needs at least one row with Rate filled.`);
+        summary.errors.push(`Rule "${name}" (Logic 2 · Weight Based): every Rate Bands row for this rule is missing a numeric Rate. Fill the Rate column on at least one row.`);
         continue;
+      }
+      const issues = describeBandIssues(
+        bands.map((b) => ({ min: b.min_kg, max: b.max_kg })),
+        "kg",
+      );
+      for (const issue of issues) {
+        summary.warnings.push(`Rule "${name}" (Logic 2): ${issue}`);
       }
       rulesJson = JSON.stringify(bands);
     } else if (logicType === "PRICE_RANGE") {
+      if (g.bands.length === 0) {
+        summary.errors.push(`Rule "${name}" (Logic 3 · Price Based): no entries on the Rate Bands sheet. Logic 3 requires at least one row on Rate Bands with Name "${name}".`);
+        continue;
+      }
       const bands = g.bands
         .map((b) => {
           const min = num(b.min);
@@ -835,14 +1065,21 @@ export const action = async ({ request }) => {
         })
         .filter(Boolean);
       if (bands.length === 0) {
-        summary.errors.push(`Rule "${name}": Price Based needs at least one row with Rate filled.`);
+        summary.errors.push(`Rule "${name}" (Logic 3 · Price Based): every Rate Bands row for this rule is missing a numeric Rate. Fill the Rate column on at least one row.`);
         continue;
+      }
+      const issues = describeBandIssues(
+        bands.map((b) => ({ min: b.min_total, max: b.max_total })),
+        currency,
+      );
+      for (const issue of issues) {
+        summary.warnings.push(`Rule "${name}" (Logic 3): ${issue}`);
       }
       rulesJson = JSON.stringify(bands);
     } else if (logicType === "WEIGHT_MULTIPLIER") {
       const built = buildNonRangeRate();
       if (built === null) {
-        summary.errors.push(`Rule "${name}": Per KG Dynamic needs a Rate value.`);
+        summary.errors.push(`Rule "${name}" (Logic 4 · Per KG Dynamic): the Rate column on the Bulk Edit sheet is empty. Fill it with the per-kg amount.`);
         continue;
       }
       const payload = { rate_per_kg: built.rate };
@@ -851,7 +1088,7 @@ export const action = async ({ request }) => {
     } else if (logicType === "PRICE_MULTIPLIER") {
       const built = buildNonRangeRate();
       if (built === null) {
-        summary.errors.push(`Rule "${name}": Per Price Dynamic needs a Rate (decimal, e.g. 0.1).`);
+        summary.errors.push(`Rule "${name}" (Logic 5 · Per Price Dynamic): the Rate column on the Bulk Edit sheet is empty. Fill it with a decimal fraction (e.g. 0.1 for 10%).`);
         continue;
       }
       const payload = { percentage: built.rate };
@@ -860,7 +1097,7 @@ export const action = async ({ request }) => {
     } else if (logicType === "ITEM_MULTIPLIER") {
       const built = buildNonRangeRate();
       if (built === null) {
-        summary.errors.push(`Rule "${name}": Per Item Dynamic needs a Rate per item.`);
+        summary.errors.push(`Rule "${name}" (Logic 6 · Per Item Dynamic): the Rate column on the Bulk Edit sheet is empty. Fill it with the per-item amount.`);
         continue;
       }
       const payload = { rate_per_item: built.rate };
@@ -872,19 +1109,50 @@ export const action = async ({ request }) => {
     }
 
     const countries = JSON.stringify(coverageToCountriesArray(g));
+    /* Queue up — the commit phase below writes only if validation passes
+       across the entire upload. */
+    rulesToWrite.push({ gid, name, countries, logicType, rulesJson, currency });
+  }
+
+  /* ── Validation gate ─────────────────────────────────────────────────
+     Any error → reject the whole upload. The bulk-edit ruleset is
+     untouched; the vendor sees every issue at once and re-uploads. */
+  if (summary.errors.length > 0) {
+    return {
+      success: false,
+      errors: summary.errors,
+      warnings: summary.warnings,
+      summary: { ...summary, wiped: 0 },
+      message: `Upload rejected · ${summary.errors.length} issue${summary.errors.length === 1 ? "" : "s"} found. Nothing was saved — fix the issues below and upload again.`,
+    };
+  }
+
+  /* ── Commit phase ───────────────────────────────────────────────────
+     Wipe the bulk-edit ruleset only after we know every rule is valid,
+     then write the queued rules. */
+  const wipedCount = await prisma.bulkEditRule.deleteMany({
+    where: { shop: shopDomain },
+  });
+  for (const r of rulesToWrite) {
     await prisma.bulkEditRule.upsert({
       where: {
-        shop_deliveryZoneGid: { shop: shopDomain, deliveryZoneGid: gid },
+        shop_deliveryZoneGid: { shop: shopDomain, deliveryZoneGid: r.gid },
       },
-      update: { name, countries, logicType, rulesJson, currency },
+      update: {
+        name: r.name,
+        countries: r.countries,
+        logicType: r.logicType,
+        rulesJson: r.rulesJson,
+        currency: r.currency,
+      },
       create: {
         shop: shopDomain,
-        deliveryZoneGid: gid,
-        name,
-        countries,
-        logicType,
-        rulesJson,
-        currency,
+        deliveryZoneGid: r.gid,
+        name: r.name,
+        countries: r.countries,
+        logicType: r.logicType,
+        rulesJson: r.rulesJson,
+        currency: r.currency,
       },
     });
     summary.updated += 1;
@@ -925,6 +1193,7 @@ export const action = async ({ request }) => {
     success: true,
     message,
     errors: summary.errors,
+    warnings: summary.warnings,
     summary: { ...summary, wiped: wipedCount.count },
     logicLabels: LOGIC_LABELS,
   };

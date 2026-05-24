@@ -144,7 +144,12 @@ export default function BulkEdit({
     }
     setLastResult(fetcher.data);
     setFile(null);
-    if (fetcher.data.message && onToast) onToast(fetcher.data.message);
+    /* Surface the result via toast. A rejected upload (success === false
+       with a message) must read as an error, not a green confirmation. */
+    if (fetcher.data.message && onToast) {
+      const prefix = fetcher.data.success === false ? "Error: " : "";
+      onToast(`${prefix}${fetcher.data.message}`);
+    }
     if (fetcher.data.error && onToast) onToast(`Error: ${fetcher.data.error}`);
     if (fetcher.data.success && onApplied) onApplied();
   }, [fetcher.state, fetcher.data, lastResult, onToast, onApplied]);
@@ -354,7 +359,8 @@ export default function BulkEdit({
         </BlockStack>
       </Card>
 
-      {/* Results */}
+      {/* Results — success banner with per-rule row issues and non-blocking
+          warnings rendered separately so vendors can triage at a glance. */}
       {lastResult && lastResult.success && lastResult.summary && (
         <Banner tone="success" title={lastResult.message}>
           <Text variant="bodySm">
@@ -378,6 +384,43 @@ export default function BulkEdit({
               </List>
             </Box>
           )}
+        </Banner>
+      )}
+      {lastResult && lastResult.warnings && lastResult.warnings.length > 0 && (
+        <Banner tone="warning" title={`${lastResult.warnings.length} heads-up${lastResult.warnings.length === 1 ? "" : "s"} — rules still applied`}>
+          <List type="bullet">
+            {lastResult.warnings.slice(0, 12).map((w, i) => (
+              <List.Item key={i}>
+                <Text variant="bodySm">{w}</Text>
+              </List.Item>
+            ))}
+          </List>
+        </Banner>
+      )}
+      {/* Validation rejection — upload was parsed cleanly but one or more
+          rules had errors. Nothing was saved. Critical tone so vendors don't
+          mistake it for a partial-success state. */}
+      {lastResult && lastResult.success === false && Array.isArray(lastResult.errors) && lastResult.errors.length > 0 && (
+        <Banner tone="critical" title={lastResult.message || "Upload rejected — fix the issues below."}>
+          <BlockStack gap="200">
+            <Text variant="bodySm">
+              Your existing rules were <b>not</b> changed. Fix the issues
+              below in the spreadsheet and upload again — the upload only
+              applies when every rule is valid.
+            </Text>
+            <List type="bullet">
+              {lastResult.errors.slice(0, 20).map((e, i) => (
+                <List.Item key={i}>
+                  <Text variant="bodySm">{e}</Text>
+                </List.Item>
+              ))}
+            </List>
+            {lastResult.errors.length > 20 && (
+              <Text variant="bodySm" tone="subdued">
+                …and {lastResult.errors.length - 20} more.
+              </Text>
+            )}
+          </BlockStack>
         </Banner>
       )}
       {lastResult && lastResult.error && (

@@ -50,28 +50,52 @@ const TEMPLATE_HEADERS = [
   "Rate",
 ];
 
+const BANDS_HEADERS = ["Name", "Min", "Max", "Rate"];
+
 const COL_COUNT = TEMPLATE_HEADERS.length;
 const EMPTY_ROW = () => Array(COL_COUNT).fill("");
 
 const INSTRUCTIONS_ROWS = [
   ["Shipofix · Bulk Edit Template"],
   [],
-  ["Sheet layout"],
-  ["• Name      — the shipping zone name this row applies to. Free-form; type any value."],
-  ["• Country   — country this row applies to (pre-filled as reference)."],
-  ["• Zone      — specific state / province / division (pre-filled, blank for countries with none)."],
+  ["Workflow in one minute"],
+  ["1. Coverage  → on the 'Bulk Edit' sheet, mark which countries / zones a rule covers by typing the rule Name in column A."],
+  ["2. Logic     → on that same first row of the rule, set Logic # and Currency."],
+  ["3. Rate      → for Logic 1, 4, 5, 6 put the rate on the Bulk Edit sheet itself."],
+  ["               for Logic 2 & 3 (category slabs) use the dedicated 'Rate Bands' sheet — one row per band, same Name."],
+  ["4. Save the file and upload it back into the Bulk Edit panel."],
+  [],
+  ["'Bulk Edit' sheet columns"],
+  ["• Name      — free-form rule name. Rows sharing a Name merge into ONE rule (coverage = union of their Country / Zone)."],
+  ["• Country   — country this row applies to (dropdown; pre-filled reference)."],
+  ["• Zone      — state / province / division (dropdown; blank = whole country)."],
   ["• Logic #   — 1-6 picks the rate model, 0 = reset to Shopify Default, blank = no change."],
   ["• Currency  — ISO code (e.g. INR, USD). Defaults to INR if blank."],
-  ["• Min/Max   — used by range types (2 & 3) only; ignored otherwise."],
-  ["• Rate      — flat rate / per-band rate / per-unit value depending on the logic type."],
+  ["• Min/Max   — only needed for Logic 2 & 3 if you prefer to keep bands on this sheet. Recommended: use the Rate Bands sheet instead."],
+  ["• Rate      — flat rate (1) / per-kg (4) / decimal % (5) / per-item (6). Leave blank for 2 & 3 (defined on Rate Bands)."],
   [],
-  ["How to fill the template"],
-  ["1.  Country and Zone columns are pre-populated with every official country/region. They're informational and ignored on upload — leave them as-is."],
-  ["2.  For each row you want to apply, type the zone Name in column A. Must match an existing Shopify shipping zone exactly — unknown names are skipped on upload."],
-  ["3.  Set Logic # and Currency on the FIRST row of each zone. Leave them blank on other rows of the same zone."],
-  ["4.  For types 1, 4, 5, 6 — put the Rate on the first row of the zone."],
-  ["5.  For types 2 & 3 — fill Min / Max / Rate per band. Bands can share zone rows or be added as new rows with the same Name."],
-  ["6.  Rows with Name left blank are skipped. Save as .xlsx and upload it back into the Bulk Edit panel."],
+  ["'Rate Bands' sheet — for category logic (Logic 2 & 3)"],
+  ["• Each row is ONE band of a rule."],
+  ["• Name   — must match the rule Name used on the Bulk Edit sheet (case-sensitive)."],
+  ["• Min    — lower bound of the band. Use 0 for the first band."],
+  ["• Max    — upper bound. Leave blank for the open-ended top band (= ∞)."],
+  ["• Rate   — flat amount charged when the cart falls inside this band."],
+  ["• Add as many rows as you need per rule. Order doesn't matter — the carrier picks the matching band by Min ≤ value < Max."],
+  ["• Logic 2 reads the cart's total weight in kg. Logic 3 reads the cart total in the rule's currency."],
+  ["• Edge cases: Min defaults to 0 if blank, Max blank = ∞. Rows without a Rate are dropped. Bands assigned to a Name that has no Logic 2 / 3 rule on Bulk Edit are ignored."],
+  [],
+  ["Examples"],
+  ["Logic 1 (Flat) — single row on Bulk Edit:"],
+  ["", "Express AU", "Australia (AU)", "", 1, "AUD", "", "", 25],
+  [],
+  ["Logic 2 (Weight bands) — coverage on Bulk Edit + bands on Rate Bands sheet:"],
+  ["Bulk Edit row:"],
+  ["", "Weight AU", "Australia (AU)", "", 2, "AUD"],
+  ["Rate Bands rows for the same Name:"],
+  ["", "Name", "Min", "Max", "Rate"],
+  ["", "Weight AU", 0, 5, 50],
+  ["", "Weight AU", 5, 10, 80],
+  ["", "Weight AU", 10, "", 120],
   [],
   ["Logic # reference"],
   ["#", "Logic Type", "Min column", "Max column", "Rate column"],
@@ -83,10 +107,10 @@ const INSTRUCTIONS_ROWS = [
   [6, "Per Item Dynamic", "—", "—", "Rate per item"],
   [],
   ["Notes"],
-  ["• Name must match an existing Shopify shipping zone exactly. Unknown / blank names are skipped on upload."],
-  ["• Uploading replaces every existing rule for the shop — zones left out are reset to Shopify Default."],
-  ["• Bulk Edit never creates or deletes zones — manage zones from the dashboard."],
-  ["• The All Regions sheet lists every country and its states/provinces for reference."],
+  ["• Uploading replaces every existing bulk-edit rule for the shop — rules you leave out are reset to Shopify Default."],
+  ["• Bulk Edit never creates or deletes Shopify zones — manage zones from the dashboard."],
+  ["• Zone-wise rules (Configuration Logic tab) are untouched and resume the moment Bulk Edit is turned off."],
+  ["• The All Regions sheet lists every country and its states / provinces for reference."],
 ];
 
 /* Parse helpers for the Country / Zone cells the vendor types or picks
@@ -291,7 +315,66 @@ export const loader = async ({ request }) => {
   ];
   zoneRows.forEach((r) => wsZones.addRow(r));
 
-  /* Sheet 2: All Regions — every country with every state/province/division.
+  /* Header styling shared by both editable sheets */
+  const headerStyle = {
+    font: { bold: true, color: { argb: "FFFFFFFF" } },
+    fill: {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF111827" },
+    },
+    alignment: { vertical: "middle", horizontal: "left" },
+  };
+  wsZones.getRow(1).eachCell((cell) => {
+    cell.font = headerStyle.font;
+    cell.fill = headerStyle.fill;
+    cell.alignment = headerStyle.alignment;
+  });
+  wsZones.getRow(1).height = 22;
+
+  /* Sheet 2: Rate Bands — dedicated sheet for Logic 2 / 3 slabs.
+     Keeping bands out of the Bulk Edit coverage sheet lets vendors see all
+     bands for a rule together and adds rows freely without juggling
+     pre-filled country rows. Bands are linked to a rule by Name. */
+  const wsBands = wb.addWorksheet("Rate Bands", {
+    views: [{ state: "frozen", ySplit: 1 }],
+  });
+  wsBands.columns = [
+    { width: 26 }, // Name
+    { width: 14 }, // Min
+    { width: 14 }, // Max
+    { width: 14 }, // Rate
+  ];
+  wsBands.addRow(BANDS_HEADERS);
+  wsBands.getRow(1).eachCell((cell) => {
+    cell.font = headerStyle.font;
+    cell.fill = headerStyle.fill;
+    cell.alignment = headerStyle.alignment;
+  });
+  wsBands.getRow(1).height = 22;
+  /* 100 blank rows so vendors can paste large band sets without resizing */
+  for (let i = 0; i < 100; i++) {
+    wsBands.addRow(["", "", "", ""]);
+  }
+  /* Numeric validation on Min / Max / Rate — friendly warning, not a hard
+     stop, so a vendor accidentally pasting a formula isn't blocked. */
+  const numericValidation = {
+    type: "decimal",
+    allowBlank: true,
+    operator: "greaterThanOrEqual",
+    formulae: [0],
+    showErrorMessage: true,
+    errorStyle: "warning",
+    errorTitle: "Numbers only",
+    error: "Min, Max and Rate must be numeric values (≥ 0). Leave Max blank for the open-ended top band.",
+  };
+  for (let r = 2; r <= wsBands.rowCount; r++) {
+    wsBands.getCell(`B${r}`).dataValidation = numericValidation;
+    wsBands.getCell(`C${r}`).dataValidation = numericValidation;
+    wsBands.getCell(`D${r}`).dataValidation = numericValidation;
+  }
+
+  /* Sheet 3: All Regions — every country with every state/province/division.
      Also serves as the source for the Country/Zone dropdowns on Bulk Edit. */
   const regionRows = [
     ["Country Code", "Country Name", "Region Code", "Region Name"],
@@ -591,6 +674,58 @@ export const action = async ({ request }) => {
           ? null
           : cParsed?.countryCode || null,
         province: pParsedForBand?.code || null,
+      });
+    }
+  }
+
+  /* Optional: dedicated Rate Bands sheet — bands keyed only by Name, with no
+     country/province context. Merges into the same group's bands array.
+     Skipped silently if the sheet is missing (older templates) or empty. */
+  const bandsSheet =
+    workbook.Sheets["Rate Bands"] ||
+    workbook.Sheets[
+      workbook.SheetNames.find((n) => n.toLowerCase() === "rate bands")
+    ];
+  if (bandsSheet) {
+    const bandRows = XLSX.utils.sheet_to_json(bandsSheet, {
+      header: 1,
+      defval: "",
+      blankrows: false,
+    });
+    /* Tolerate header row variations — only require Name in column A. Rows
+       before the data start (e.g. an instructional row a vendor added) are
+       skipped via the same "no name" filter below. */
+    const nonEmpty = (v) => v !== "" && v !== null && v !== undefined;
+    const startIdx = bandRows.length && String(bandRows[0][0] || "").trim().toLowerCase() === "name" ? 1 : 0;
+    for (let i = startIdx; i < bandRows.length; i++) {
+      const r = bandRows[i];
+      const name = String(r[0] || "").trim();
+      if (!name) continue;
+      const min = r[1];
+      const max = r[2];
+      const rate = r[3];
+      /* Drop completely empty rows or rows missing a rate — a band without a
+         rate is meaningless and would otherwise inflate the band count. */
+      if (!nonEmpty(rate)) continue;
+      if (!groups.has(name)) {
+        /* Orphan band — the rule's coverage/logic must still come from the
+           Bulk Edit sheet. Create the group so the "no coverage" error
+           below fires with the correct rule name. */
+        groups.set(name, {
+          name,
+          logicNum: null,
+          currency: "",
+          coverage: new Map(),
+          hasRestOfWorld: false,
+          bands: [],
+        });
+      }
+      groups.get(name).bands.push({
+        min,
+        max,
+        rate,
+        countryCode: null,
+        province: null,
       });
     }
   }

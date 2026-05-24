@@ -5,7 +5,7 @@
  * Empty Logic # rows are skipped — existing rules stay untouched.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useFetcher } from "react-router";
 import {
   Badge,
@@ -15,53 +15,12 @@ import {
   Button,
   Card,
   DropZone,
-  Icon,
   InlineStack,
   List,
   Modal,
-  Scrollable,
   Text,
-  TextField,
 } from "@shopify/polaris";
-import { SearchIcon } from "@shopify/polaris-icons";
-import ALL_COUNTRIES from "../lib/locations.json";
-
-const LOGIC_REFERENCE = [
-  { num: 1, label: "Standard Flat Tier", hint: "Fill Rate column. One row per zone." },
-  { num: 2, label: "Weight Based (Category)", hint: "Use Min / Max / Rate. Multiple rows per zone = bands." },
-  { num: 3, label: "Price Based (Category)", hint: "Use Min / Max / Rate on cart total. Multiple rows = bands." },
-  { num: 4, label: "Per KG Dynamic", hint: "Fill Rate column with rate per kg." },
-  { num: 5, label: "Per Price Dynamic", hint: "Fill Rate column with decimal % (0.1 = 10%)." },
-  { num: 6, label: "Per Item Dynamic", hint: "Fill Rate column with rate per item." },
-];
-
-const SORTED_COUNTRIES = [...ALL_COUNTRIES].sort((a, b) =>
-  a.name.localeCompare(b.name),
-);
-
-/* Escape special regex chars so user-typed text is treated literally */
-function escapeRegex(s) {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-/* Wrap matched substrings in <mark> for visual highlight.
-   tokens is a pre-lowered list of whitespace-split search tokens. */
-function highlight(text, tokens) {
-  const s = String(text ?? "");
-  if (!tokens.length || !s) return s;
-  const re = new RegExp(`(${tokens.map(escapeRegex).join("|")})`, "gi");
-  const parts = s.split(re);
-  return parts.map((p, i) => {
-    if (!p) return null;
-    return tokens.includes(p.toLowerCase()) ? (
-      <mark key={i} className="bulk-codes-mark">
-        {p}
-      </mark>
-    ) : (
-      <span key={i}>{p}</span>
-    );
-  });
-}
+import BulkEditDocs from "./BulkEditDocs";
 
 export default function BulkEdit({
   enabled,
@@ -77,30 +36,10 @@ export default function BulkEdit({
   const [lastResult, setLastResult] = useState(null);
   const [downloading, setDownloading] = useState(false);
   const [downloadingLast, setDownloadingLast] = useState(false);
-  const [codesSearch, setCodesSearch] = useState("");
   const [confirmDownload, setConfirmDownload] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [lastDeleteData, setLastDeleteData] = useState(null);
-
-  const searchTokens = useMemo(() => {
-    return codesSearch.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  }, [codesSearch]);
-
-  const filteredCountries = useMemo(() => {
-    if (!searchTokens.length) return SORTED_COUNTRIES;
-    /* Country (or any of its zones) must match ALL tokens to be shown */
-    return SORTED_COUNTRIES.filter((c) =>
-      searchTokens.every((tok) => {
-        if (c.name.toLowerCase().includes(tok)) return true;
-        if (c.code.toLowerCase().includes(tok)) return true;
-        return (c.provinces || []).some(
-          (p) =>
-            p.name.toLowerCase().includes(tok) ||
-            p.code.toLowerCase().includes(tok),
-        );
-      }),
-    );
-  }, [searchTokens]);
+  const [docsOpen, setDocsOpen] = useState(false);
 
   const handleDrop = useCallback((_dropped, accepted) => {
     if (accepted.length > 0) setFile(accepted[0]);
@@ -265,115 +204,21 @@ export default function BulkEdit({
         </Card>
       )}
 
-      {/* Important notification with Logic # reference */}
+      {/* Quick pointer to the full guide (Logic #, codes, examples) */}
       <Banner
-        tone="warning"
-        title="Before you fill the template · Logic # reference"
+        tone="info"
+        title="New to the template? Read the guide first."
+        action={{
+          content: "View documentation",
+          onAction: () => setDocsOpen(true),
+        }}
       >
-        <BlockStack gap="200">
-          <Text>
-            Each zone&apos;s shipping behavior is set with a single number in the{" "}
-            <b>Logic #</b> column. Leave it blank to keep the existing rule
-            unchanged. Set it to <b>0</b> to reset the zone to Shopify Default.
-          </Text>
-          <div className="bulk-logic-grid">
-            {LOGIC_REFERENCE.map((l) => (
-              <div key={l.num} className="bulk-logic-row">
-                <span className="bulk-logic-num">{l.num}</span>
-                <div>
-                  <div className="bulk-logic-label">{l.label}</div>
-                  <div className="bulk-logic-hint">{l.hint}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="bulk-codes-note">
-            <div className="bulk-codes-title">Country &amp; zone codes</div>
-            <div className="bulk-codes-body">
-              Both ISO codes are shown inline in the <b>Country</b> and{" "}
-              <b>Zone</b> columns of every row — e.g.{" "}
-              <code>India (IN)</code> · <code>Tamil Nadu (TN)</code>. The full
-              searchable reference is below, and the <b>All Regions</b> sheet
-              inside the template contains the same list.
-            </div>
-          </div>
-        </BlockStack>
+        <Text>
+          The guide explains the two editable sheets — <b>Bulk Edit</b> for
+          coverage + logic, and <b>Rate Bands</b> for category slabs (Logic 2
+          &amp; 3) — and lists every Logic # and country / zone code.
+        </Text>
       </Banner>
-
-      {/* Full country & zone code reference */}
-      <Card>
-        <BlockStack gap="300">
-          <InlineStack align="space-between" blockAlign="center" wrap={false}>
-            <BlockStack gap="050">
-              <Text variant="headingMd" as="h3">
-                Country &amp; zone code reference
-              </Text>
-              <Text tone="subdued">
-                Every country and every state / province / division — with the
-                ISO codes you&apos;ll see in the template.
-              </Text>
-            </BlockStack>
-            <Badge>
-              {`${filteredCountries.length} of ${SORTED_COUNTRIES.length} countries`}
-            </Badge>
-          </InlineStack>
-
-          <TextField
-            label="Search countries or zones"
-            labelHidden
-            value={codesSearch}
-            onChange={setCodesSearch}
-            prefix={<Icon source={SearchIcon} />}
-            placeholder="Search by country or zone name / code…"
-            autoComplete="off"
-            clearButton
-            onClearButtonClick={() => setCodesSearch("")}
-          />
-
-          <Scrollable style={{ maxHeight: "360px" }} shadow>
-            <div className="bulk-codes-list">
-              {filteredCountries.map((c) => (
-                <div key={c.code} className="bulk-codes-country">
-                  <div className="bulk-codes-country-head">
-                    <span className="bulk-codes-country-name">
-                      {highlight(c.name, searchTokens)}
-                    </span>
-                    <span className="bulk-codes-country-code">
-                      {highlight(c.code, searchTokens)}
-                    </span>
-                    {c.provinces && c.provinces.length > 0 && (
-                      <span className="bulk-codes-country-count">
-                        {c.provinces.length} zones
-                      </span>
-                    )}
-                  </div>
-                  {c.provinces && c.provinces.length > 0 && (
-                    <div className="bulk-codes-province-grid">
-                      {c.provinces.map((p) => (
-                        <span key={p.code} className="bulk-codes-chip">
-                          <span className="bulk-codes-chip-name">
-                            {highlight(p.name, searchTokens)}
-                          </span>
-                          <span className="bulk-codes-chip-code">
-                            {highlight(p.code, searchTokens)}
-                          </span>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
-              {filteredCountries.length === 0 && (
-                <div className="bulk-codes-empty">
-                  <Text tone="subdued" variant="bodySm">
-                    No countries or zones match &quot;{codesSearch}&quot;.
-                  </Text>
-                </div>
-              )}
-            </div>
-          </Scrollable>
-        </BlockStack>
-      </Card>
 
       {/* Step 1: download */}
       <Card>
@@ -382,22 +227,26 @@ export default function BulkEdit({
             <Text variant="headingMd" as="h3">
               Step 1 · Download the template
             </Text>
-            <Button
-              variant="primary"
-              loading={downloading}
-              onClick={handleDownloadTemplate}
-              accessibilityLabel="Download Excel template"
-            >
-              Download .xlsx
-            </Button>
+            <InlineStack gap="200" wrap={false}>
+              <Button onClick={() => setDocsOpen(true)}>
+                View documentation
+              </Button>
+              <Button
+                variant="primary"
+                loading={downloading}
+                onClick={handleDownloadTemplate}
+                accessibilityLabel="Download Excel template"
+              >
+                Download .xlsx
+              </Button>
+            </InlineStack>
           </InlineStack>
           <Text tone="subdued">
-            One row per official country / region — Country and Zone columns
-            pre-filled as reference. The <b>Name</b> column is free-form;
-            type whatever zone name you want each row to apply to. Rule
-            columns (Logic #, Currency, Min, Max, Rate) are blank too. Fill
-            in only the rows you need. The bundled <b>All Regions</b> sheet
-            lists every country and its states / provinces / divisions.
+            The workbook ships with four sheets: <b>Bulk Edit</b> (coverage +
+            logic, with Country / Zone dropdowns pre-filled), <b>Rate Bands</b>{" "}
+            (slabs for Logic 2 &amp; 3 — one row per band, linked by Name),{" "}
+            <b>All Regions</b> (read-only reference), and <b>Instructions</b>.
+            Fill in only the rows you need.
           </Text>
         </BlockStack>
       </Card>
@@ -565,6 +414,9 @@ export default function BulkEdit({
           </BlockStack>
         </Modal.Section>
       </Modal>
+
+      {/* Full Excel walkthrough — Logic # reference, country codes, examples */}
+      <BulkEditDocs open={docsOpen} onClose={() => setDocsOpen(false)} />
 
       {/* Delete-last confirmation */}
       <Modal

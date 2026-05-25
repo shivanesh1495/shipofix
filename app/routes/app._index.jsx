@@ -768,13 +768,18 @@ export default function ShippingDashboard() {
                 <Text tone="subdued" variant="bodySm">
                   {tabDescriptions[selectedTab]}
                 </Text>
-                <Button
-                  icon={InfoIcon}
-                  onClick={() => shopify.modal.show("docs-modal")}
-                  accessibilityLabel="Open help guide"
-                >
-                  Help guide
-                </Button>
+                {/* Bulk Edit has its own inline "View documentation" buttons
+                    and a dedicated guide modal, so hiding the global Help
+                    guide here keeps the toolbar from looking redundant. */}
+                {selectedTab !== 2 && (
+                  <Button
+                    icon={InfoIcon}
+                    onClick={() => shopify.modal.show("docs-modal")}
+                    accessibilityLabel="Open help guide"
+                  >
+                    Help guide
+                  </Button>
+                )}
               </InlineStack>
             </Box>
             <Box paddingBlockStart="400">

@@ -230,6 +230,19 @@ function ruleToEditState(rule) {
   return { isRange: false, rate: rate != null ? String(rate) : "" };
 }
 
+/* Client-side mirror of the server's ISO 4217 list. Used to enable the
+   Save button only when the currency is one a vendor can actually ship in.
+   Keeping it shorter than the full server list keeps the dropdown usable —
+   uncommon currencies still pass server-side validation. */
+const COMMON_CURRENCIES = [
+  "USD", "EUR", "GBP", "AUD", "CAD", "JPY", "CNY", "INR", "NZD", "CHF",
+  "AED", "ARS", "BDT", "BRL", "CLP", "COP", "CZK", "DKK", "EGP", "HKD",
+  "HUF", "IDR", "ILS", "ISK", "KRW", "KWD", "LKR", "MAD", "MXN", "MYR",
+  "NGN", "NOK", "OMR", "PEN", "PHP", "PKR", "PLN", "QAR", "RON", "RUB",
+  "SAR", "SEK", "SGD", "THB", "TRY", "TWD", "UAH", "VND", "ZAR",
+];
+const COMMON_CURRENCY_SET = new Set(COMMON_CURRENCIES);
+
 /* Short label used as the rate field's label in the edit modal. */
 function rateLabelFor(logicType) {
   switch (logicType) {
@@ -700,7 +713,12 @@ export default function RulesOverview({
           content: "Save",
           onAction: handleSaveEdit,
           loading: saving,
-          disabled: saving,
+          /* Block Save while invalid — empty Name or unknown currency code.
+             Server validates again so this is just UX guidance. */
+          disabled:
+            saving ||
+            !editName.trim() ||
+            !COMMON_CURRENCY_SET.has((editCurrency || "").trim().toUpperCase()),
         }}
         secondaryActions={[{ content: "Cancel", onAction: closeEdit, disabled: saving }]}
       >
@@ -731,6 +749,12 @@ export default function RulesOverview({
                 value={editName}
                 onChange={setEditName}
                 autoComplete="off"
+                requiredIndicator
+                error={
+                  editName.trim() === ""
+                    ? "Name can't be empty"
+                    : undefined
+                }
               />
 
               <TextField
@@ -739,7 +763,15 @@ export default function RulesOverview({
                 onChange={(v) => setEditCurrency(v.toUpperCase())}
                 autoComplete="off"
                 maxLength={3}
-                helpText="ISO 3-letter code (e.g. USD, EUR, GBP)."
+                requiredIndicator
+                helpText="ISO 3-letter code (e.g. USD, EUR, GBP, AUD, CAD, JPY)."
+                error={
+                  !COMMON_CURRENCY_SET.has(
+                    (editCurrency || "").trim().toUpperCase(),
+                  )
+                    ? `"${editCurrency}" isn't a recognised currency code`
+                    : undefined
+                }
               />
 
               {editingIsRange ? (

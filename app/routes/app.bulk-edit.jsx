@@ -21,6 +21,31 @@ import { authenticate } from "../shopify.server";
 import { QUERY_DELIVERY_ZONES } from "../lib/graphql.js";
 import ALL_COUNTRIES from "../lib/locations.json";
 
+/* ISO 4217 currency codes used for the Currency dropdown in the template
+   and the upload-side validation. Common-first, then alphabetical — keeps
+   the dropdown usable while still accepting any real currency a vendor
+   ships in. */
+const ISO_4217_CURRENCIES = [
+  "USD", "EUR", "GBP", "AUD", "CAD", "JPY", "CNY", "INR", "NZD", "CHF",
+  "AED", "AFN", "ALL", "AMD", "ANG", "AOA", "ARS", "AWG", "AZN", "BAM",
+  "BBD", "BDT", "BGN", "BHD", "BIF", "BMD", "BND", "BOB", "BRL", "BSD",
+  "BTN", "BWP", "BYN", "BZD", "CDF", "CLP", "COP", "CRC", "CUP", "CVE",
+  "CZK", "DJF", "DKK", "DOP", "DZD", "EGP", "ERN", "ETB", "FJD", "FKP",
+  "GEL", "GHS", "GIP", "GMD", "GNF", "GTQ", "GYD", "HKD", "HNL", "HRK",
+  "HTG", "HUF", "IDR", "ILS", "IQD", "IRR", "ISK", "JMD", "JOD", "KES",
+  "KGS", "KHR", "KMF", "KPW", "KRW", "KWD", "KYD", "KZT", "LAK", "LBP",
+  "LKR", "LRD", "LSL", "LYD", "MAD", "MDL", "MGA", "MKD", "MMK", "MNT",
+  "MOP", "MRU", "MUR", "MVR", "MWK", "MXN", "MYR", "MZN", "NAD", "NGN",
+  "NIO", "NOK", "NPR", "OMR", "PAB", "PEN", "PGK", "PHP", "PKR", "PLN",
+  "PYG", "QAR", "RON", "RSD", "RUB", "RWF", "SAR", "SBD", "SCR", "SDG",
+  "SEK", "SGD", "SHP", "SLE", "SOS", "SRD", "SSP", "STN", "SYP", "SZL",
+  "THB", "TJS", "TMT", "TND", "TOP", "TRY", "TTD", "TWD", "TZS", "UAH",
+  "UGX", "UYU", "UZS", "VES", "VND", "VUV", "WST", "XAF", "XCD", "XOF",
+  "XPF", "YER", "ZAR", "ZMW", "ZWL",
+];
+
+const VALID_CURRENCY_SET = new Set(ISO_4217_CURRENCIES);
+
 const LOGIC_BY_NUMBER = {
   1: "STANDARD_TIER",
   2: "WEIGHT_RANGE",
@@ -875,6 +900,7 @@ export const loader = async ({ request }) => {
   wsLists.columns = [
     { header: "Country", width: 36 },
     { header: "Zone", width: 36 },
+    { header: "Currency", width: 14 },
   ];
   const countryLabels = [];
   const provinceLabels = [];
@@ -886,9 +912,18 @@ export const loader = async ({ request }) => {
     });
   }
   countryLabels.push("Rest of World");
-  const maxLen = Math.max(countryLabels.length, provinceLabels.length);
+  const currencyLabels = ISO_4217_CURRENCIES;
+  const maxLen = Math.max(
+    countryLabels.length,
+    provinceLabels.length,
+    currencyLabels.length,
+  );
   for (let i = 0; i < maxLen; i++) {
-    wsLists.addRow([countryLabels[i] || "", provinceLabels[i] || ""]);
+    wsLists.addRow([
+      countryLabels[i] || "",
+      provinceLabels[i] || "",
+      currencyLabels[i] || "",
+    ]);
   }
 
   /* Named ranges so the dropdown formulas stay readable */
@@ -899,6 +934,10 @@ export const loader = async ({ request }) => {
   wb.definedNames.add(
     `Lists!$B$2:$B$${provinceLabels.length + 1}`,
     "ValidZones",
+  );
+  wb.definedNames.add(
+    `Lists!$C$2:$C$${currencyLabels.length + 1}`,
+    "ValidCurrencies",
   );
 
   /* Attach data validation to Country (B), Zone (C) and Logic # (D) for
@@ -933,6 +972,18 @@ export const loader = async ({ request }) => {
       errorStyle: "stop",
       errorTitle: "Invalid Logic #",
       error: "Logic # must be 1-6 (or 0 to reset the zone). Leave blank to keep the existing rule.",
+    };
+    /* Currency (column E): ISO 4217 dropdown. errorStyle 'stop' blocks
+       free-text typos like "USC" — the user must pick a real currency code
+       from the list (or leave blank to default to USD on upload). */
+    wsZones.getCell(`E${r}`).dataValidation = {
+      type: "list",
+      allowBlank: true,
+      formulae: ["=ValidCurrencies"],
+      showErrorMessage: true,
+      errorStyle: "stop",
+      errorTitle: "Invalid currency",
+      error: "Pick an ISO 4217 currency code from the dropdown (e.g. USD, EUR, GBP). Leave blank to default to USD.",
     };
     /* Rate (column F): combined custom validation that does TWO jobs at once.
         - When Logic # in column D is 2 or 3 → the cell must be blank
@@ -1006,6 +1057,12 @@ export const action = async ({ request }) => {
 
     if (!id) return { success: false, error: "Missing rule id." };
     if (!nextName) return { success: false, error: "Name can't be empty." };
+    if (!VALID_CURRENCY_SET.has(nextCurrency)) {
+      return {
+        success: false,
+        error: `Currency "${nextCurrency}" isn't a valid ISO 4217 code. Use USD, EUR, GBP, AUD, CAD, JPY, etc.`,
+      };
+    }
 
     let parsedRules;
     try {
@@ -1532,6 +1589,15 @@ export const action = async ({ request }) => {
        writing — there's no prior currency to inherit.) */
     const gid = ruleNameToGid(name);
     const currency = [...g.currencies][0] || "USD";
+    /* Reject typos like "USC" that an older template (without the Currency
+       dropdown) might have let through. The Excel-side dropdown blocks new
+       typos, this is the belt-and-braces server check for legacy files. */
+    if (currency && !VALID_CURRENCY_SET.has(currency)) {
+      summary.errors.push(
+        `Rule "${name}": currency "${currency}" isn't a valid ISO 4217 code. Use one of: ${ISO_4217_CURRENCIES.slice(0, 10).join(", ")}, …`,
+      );
+      continue;
+    }
 
     /* Build rules JSON for the chosen logic type */
     let rulesJson;

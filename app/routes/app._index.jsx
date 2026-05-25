@@ -5,6 +5,7 @@ import {
   BlockStack,
   Box,
   Button,
+  InlineStack,
   Page,
   Tabs,
   Text,
@@ -521,7 +522,12 @@ export default function ShippingDashboard() {
       setCurrency(activeZone.rule.currency);
       setRules(JSON.parse(activeZone.rule.rulesJson || "{}"));
     } else {
-      setLogicType("STANDARD_TIER");
+      /* Unsaved zone starts in "Shopify default" — picking any other model
+         from the dropdown will switch logicType to that value and reveal
+         the price fields. Defaulting to STANDARD_TIER here used to leave
+         the dropdown stuck on DEFAULT because the editor displayed the
+         saved-rule branch instead of local state. */
+      setLogicType("DEFAULT");
       setCurrency("INR");
       setRules({});
     }
@@ -718,14 +724,6 @@ export default function ShippingDashboard() {
                 </div>
               </div>
             </div>
-            <div style={{ display: "flex", gap: "4px" }}>
-              <Button
-                icon={InfoIcon}
-                variant="tertiary"
-                onClick={() => shopify.modal.show("docs-modal")}
-                accessibilityLabel="App documentation"
-              />
-            </div>
           </div>
 
           {/* ── Status Banners ── */}
@@ -771,9 +769,18 @@ export default function ShippingDashboard() {
           {/* ── Main Content ── */}
           <Tabs tabs={tabs} selected={selectedTab} onSelect={setSelectedTab}>
             <Box paddingBlockStart="300" paddingInlineStart="400" paddingInlineEnd="400">
-              <Text tone="subdued" variant="bodySm">
-                {tabDescriptions[selectedTab]}
-              </Text>
+              <InlineStack align="space-between" blockAlign="center" gap="400" wrap={false}>
+                <Text tone="subdued" variant="bodySm">
+                  {tabDescriptions[selectedTab]}
+                </Text>
+                <Button
+                  icon={InfoIcon}
+                  onClick={() => shopify.modal.show("docs-modal")}
+                  accessibilityLabel="Open help guide"
+                >
+                  Help guide
+                </Button>
+              </InlineStack>
             </Box>
             <Box paddingBlockStart="400">
               {/* When Bulk Edit owns rule editing, lock the other tabs to

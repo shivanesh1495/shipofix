@@ -549,12 +549,11 @@ export default function LogicEditor({
             { label: "Shopify default (use Shopify's own rates)", value: "DEFAULT" },
             ...LOGIC_TYPES,
           ]}
-          value={activeZone.rule ? logicType : "DEFAULT"}
+          value={logicType}
           onChange={(v) => {
-            if (v === "DEFAULT") {
-              if (activeZone.rule) onDeleteRule(activeZone.rule.id);
-            } else {
-              setLogicType(v);
+            setLogicType(v);
+            if (v === "DEFAULT" && activeZone.rule) {
+              onDeleteRule(activeZone.rule.id);
             }
           }}
           disabled={disabled}

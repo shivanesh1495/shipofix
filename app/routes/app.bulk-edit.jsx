@@ -1205,14 +1205,31 @@ export const action = async ({ request }) => {
     return { success: true, message: `Rule "${nextName}" updated.` };
   }
 
-  /* Drop the stored last-upload file (vendor-initiated cleanup). Doesn't touch
-     any zone rules — only the cached file. */
+  /* Drop the stored last-upload file AND every bulk-edit rule that came
+     from it. Vendor-initiated cleanup: deleting the spreadsheet should
+     also clear the rules it created — otherwise the table on the All
+     rates tab keeps showing rules with no file behind them and there's
+     no way to remove them without re-uploading a fresh file. Zone-wise
+     rules (ZoneRule) and app settings are untouched. */
   if (intent === "delete_last") {
-    if (!prisma.bulkEditUpload) {
-      return { success: true, message: "Stored upload removed." };
+    let wiped = { count: 0 };
+    if (prisma.bulkEditRule) {
+      wiped = await prisma.bulkEditRule.deleteMany({
+        where: { shop: shopDomain },
+      });
     }
-    await prisma.bulkEditUpload.deleteMany({ where: { shop: shopDomain } });
-    return { success: true, message: "Stored upload removed." };
+    if (prisma.bulkEditUpload) {
+      await prisma.bulkEditUpload.deleteMany({ where: { shop: shopDomain } });
+    }
+    const ruleNote =
+      wiped.count > 0
+        ? ` and ${wiped.count} bulk rule${wiped.count === 1 ? "" : "s"}`
+        : "";
+    return {
+      success: true,
+      message: `Stored upload${ruleNote} removed.`,
+      bulkRulesWiped: wiped.count,
+    };
   }
 
   const file = formData.get("file");

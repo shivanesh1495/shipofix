@@ -490,9 +490,9 @@ export default function BulkEdit({
       <Modal
         open={confirmDelete}
         onClose={() => setConfirmDelete(false)}
-        title="Delete stored upload?"
+        title="Delete stored upload and all its rules?"
         primaryAction={{
-          content: "Delete",
+          content: "Delete file and rules",
           destructive: true,
           onAction: handleDeleteLast,
           loading: deleteFetcher.state !== "idle",
@@ -502,12 +502,17 @@ export default function BulkEdit({
         ]}
       >
         <Modal.Section>
-          <Text>
-            Removes the cached copy of{" "}
-            <b>{lastUpload?.filename || "the last upload"}</b>. Your live
-            shipping rules are not affected — they only change when you upload a
-            new file.
-          </Text>
+          <BlockStack gap="200">
+            <Text>
+              This removes <b>{lastUpload?.filename || "the last upload"}</b>{" "}
+              AND every bulk-edit rule it created. Your <b>All rates</b> table
+              will be empty until you upload a new file.
+            </Text>
+            <Text tone="subdued" variant="bodySm">
+              Zone-by-zone rules in <b>Set up rates</b> are not affected —
+              they take over again the moment Bulk edit is turned off.
+            </Text>
+          </BlockStack>
         </Modal.Section>
       </Modal>
     </BlockStack>

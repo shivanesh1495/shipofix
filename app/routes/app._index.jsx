@@ -517,9 +517,11 @@ export default function ShippingDashboard() {
      inside the Shopify embedded-app iframe (where revalidation can lag). */
   const [bulkOptimisticEdits, setBulkOptimisticEdits] = useState({});
 
-  /* Drop an optimistic patch the moment the canonical loader data catches
-     up to it — comparing the three fields the inline editor actually
-     changes (name, currency, rulesJson) is enough to detect parity. */
+  /* Drop an optimistic patch when (a) the canonical loader data catches up
+     to it — parity on name/currency/rulesJson — or (b) the rule no longer
+     exists in the loader data at all (deleted via the Bulk edit "Delete"
+     button, or a re-upload created fresh IDs). Without (b) the stale
+     overrides would linger forever and confuse later renders. */
   useEffect(() => {
     setBulkOptimisticEdits((prev) => {
       const keys = Object.keys(prev);
@@ -529,8 +531,12 @@ export default function ShippingDashboard() {
       for (const k of keys) {
         const real = bulkRules.find((r) => r.id === k);
         const ovr = prev[k];
+        if (!real) {
+          delete next[k];
+          changed = true;
+          continue;
+        }
         if (
-          real &&
           real.name === ovr.name &&
           real.currency === ovr.currency &&
           real.rulesJson === ovr.rulesJson

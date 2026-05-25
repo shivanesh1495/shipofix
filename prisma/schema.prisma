@@ -33,7 +33,7 @@ model ZoneRule {
   deliveryZoneGid String   @unique
   name            String
   logicType       String   @default("STANDARD_TIER")
-  currency        String   @default("INR")
+  currency        String   @default("USD")
   rulesJson       String   @default("{}")
   countries       String?
   createdAt       DateTime @default(now())
@@ -68,7 +68,7 @@ model BulkEditRule {
   deliveryZoneGid String
   name            String
   logicType       String   @default("STANDARD_TIER")
-  currency        String   @default("INR")
+  currency        String   @default("USD")
   rulesJson       String   @default("{}")
   countries       String?
   createdAt       DateTime @default(now())

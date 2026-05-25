@@ -68,7 +68,7 @@ const INSTRUCTIONS_ROWS = [
   ["• Country   — country this row applies to (dropdown; pre-filled reference)."],
   ["• Zone      — state / province / division (dropdown; blank = whole country)."],
   ["• Logic #   — 1-6 picks the rate model, 0 = reset to Shopify Default, blank = no change."],
-  ["• Currency  — ISO code (e.g. INR, USD). Defaults to INR if blank."],
+  ["• Currency  — ISO code (e.g. USD, EUR, GBP). Defaults to USD if blank."],
   ["• Rate      — Logic 1 (flat) / 4 (per kg) / 5 (decimal %, e.g. 0.1) / 6 (per item). LEAVE BLANK for Logic 2 & 3 — those rates come from the Rate Bands sheet."],
   [],
   ["'Rate Bands' sheet — REQUIRED for Logic 2 & 3"],
@@ -367,7 +367,7 @@ export const loader = async ({ request }) => {
   wsZones.getCell("D1").note =
     "1 = Standard Flat Tier · 2 = Weight Based (use Rate Bands) · 3 = Price Based (use Rate Bands) · 4 = Per KG · 5 = Per Price (decimal %, e.g. 0.1) · 6 = Per Item. 0 = reset to Shopify Default. Blank = keep existing rule.";
   wsZones.getCell("E1").note =
-    "ISO currency code (e.g. INR, USD, AUD). Defaults to INR if blank. Set once on the rule's first row.";
+    "ISO currency code (e.g. USD, EUR, GBP, AUD). Defaults to USD if blank. Set once on the rule's first row.";
   wsZones.getCell("F1").note =
     "Rate amount for Logic 1, 4, 5, 6. LEAVE BLANK for Logic 2 & 3 — those rates come from the Rate Bands sheet.";
 
@@ -982,11 +982,11 @@ export const action = async ({ request }) => {
       }
     }
 
-    /* Currency: explicit > INR. (The previous bulk-rule row isn't consulted
+    /* Currency: explicit > USD. (The previous bulk-rule row isn't consulted
        because the apply phase wipes the whole bulk-edit ruleset before
        writing — there's no prior currency to inherit.) */
     const gid = ruleNameToGid(name);
-    const currency = [...g.currencies][0] || "INR";
+    const currency = [...g.currencies][0] || "USD";
 
     /* Build rules JSON for the chosen logic type */
     let rulesJson;

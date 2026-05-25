@@ -208,7 +208,7 @@ export const action = async ({ request }) => {
     await log({ event: "RATE_CALCULATED", calculatedRate, serviceName, serviceCode });
 
     if (calculatedRate !== null && Number.isFinite(calculatedRate) && calculatedRate >= 0) {
-      const currency = rate.currency || matchedRule.currency || "INR";
+      const currency = rate.currency || matchedRule.currency || "USD";
       const rateInSubunits = Math.round(calculatedRate * 100).toString();
 
       const responseBody = {

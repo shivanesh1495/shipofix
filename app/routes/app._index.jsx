@@ -251,7 +251,7 @@ export const action = async ({ request }) => {
     const countries = formData.get("countries");
     const logicType = formData.get("logicType");
     const rulesJson = formData.get("rulesJson");
-    const currency = formData.get("currency") || "INR";
+    const currency = formData.get("currency") || "USD";
 
     await prisma.zoneRule.upsert({
       where: {
@@ -490,7 +490,7 @@ export default function ShippingDashboard() {
 
   // Logic Editor State
   const [logicType, setLogicType] = useState("STANDARD_TIER");
-  const [currency, setCurrency] = useState("INR");
+  const [currency, setCurrency] = useState("USD");
   const [rules, setRules] = useState({});
 
   // Table State
@@ -528,7 +528,7 @@ export default function ShippingDashboard() {
          the dropdown stuck on DEFAULT because the editor displayed the
          saved-rule branch instead of local state. */
       setLogicType("DEFAULT");
-      setCurrency("INR");
+      setCurrency("USD");
       setRules({});
     }
   }, [activeZone]);

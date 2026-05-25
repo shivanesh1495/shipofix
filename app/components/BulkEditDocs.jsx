@@ -97,7 +97,7 @@ const BULK_EDIT_COLUMNS = [
   {
     col: "Currency",
     required: "First row of each rule",
-    body: "ISO 4217 code (INR, USD, AUD, …). Defaults to INR if blank.",
+    body: "ISO 4217 code (USD, EUR, GBP, …). Defaults to USD if blank.",
   },
   {
     col: "Rate",
@@ -285,7 +285,7 @@ export default function BulkEditDocs({ open, onClose }) {
                 blank to leave the existing rule alone.
               </li>
               <li>
-                <b>Set Currency once</b> on that same first row. Defaults to INR
+                <b>Set Currency once</b> on that same first row. Defaults to USD
                 if blank.
               </li>
               <li>

@@ -55,8 +55,8 @@ function fmtProvince(p) {
   return p.name || p.code || "";
 }
 
-/* Summary label for the Country column: "India (IN)", or
-   "India (IN) +2 more" when the zone covers multiple countries. */
+/* Summary label for the Country column: "United States (US)", or
+   "United States (US) +2 more" when the zone covers multiple countries. */
 function countrySummary(zone) {
   const countries = zone.countries || [];
   if (countries.length === 0) return "";

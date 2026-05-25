@@ -234,9 +234,12 @@ export default function BulkEdit({
       <Card>
         <Box padding="500">
           <BlockStack gap="300" align="center" inlineAlign="center">
-            <Text variant="headingMd" as="h3">Bulk Edit is turned off</Text>
-            <Text tone="subdued">
-              Turn it on to import shipping rules from an Excel template.
+            <Text variant="headingMd" as="h3">Bulk edit is off</Text>
+            <Text tone="subdued" alignment="center">
+              Right now your rates come from the <b>Set up rates</b> tab — one
+              zone at a time. Turn bulk edit on if you&apos;d rather download a
+              spreadsheet, edit lots of zones at once, and upload them back.
+              Your zone-by-zone rates stay saved either way.
             </Text>
             {onToggleEnabled && (
               <Button
@@ -244,7 +247,7 @@ export default function BulkEdit({
                 loading={toggling}
                 onClick={() => onToggleEnabled(true)}
               >
-                Turn on Bulk Edit
+                Turn on bulk edit
               </Button>
             )}
           </BlockStack>

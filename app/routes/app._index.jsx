@@ -666,19 +666,25 @@ export default function ShippingDashboard() {
   const tabs = [
     {
       id: "config",
-      content: "Configuration Logic",
-      accessibilityLabel: "Configure rules",
+      content: "Set up rates",
+      accessibilityLabel: "Set shipping rates for one zone at a time",
     },
     {
       id: "overview",
-      content: "Rules Overview",
-      accessibilityLabel: "View all rules",
+      content: "All rates",
+      accessibilityLabel: "See every zone and its current rate at a glance",
     },
     {
       id: "bulk",
-      content: "Bulk Edit",
-      accessibilityLabel: "Bulk edit via Excel template",
+      content: "Bulk edit (Excel)",
+      accessibilityLabel: "Download a spreadsheet, edit many zones, upload",
     },
+  ];
+
+  const tabDescriptions = [
+    "Pick a zone on the left, choose how you want to charge for it, and save.",
+    "A single table of every zone, its pricing model and how much it charges. Use this to spot-check or jump back to editing.",
+    "Edit many zones at once by downloading the template, filling it in, and uploading. Best for large catalogues.",
   ];
 
   const handleToggleBulkEdit = (next) => {
@@ -734,9 +740,9 @@ export default function ShippingDashboard() {
           {carrierStatus.staleServices?.length > 0 && (
             <Banner
               tone="warning"
-              title={`${carrierStatus.staleServices.length} duplicate shipping engine(s) detected`}
+              title={`We found ${carrierStatus.staleServices.length} leftover shipping connection${carrierStatus.staleServices.length === 1 ? "" : "s"} from a previous install`}
               action={{
-                content: "Fix and Deduplicate",
+                content: "Clean up",
                 onAction: () => {
                   const body = new FormData();
                   body.set("intent", "cleanup_carrier_services");
@@ -755,13 +761,20 @@ export default function ShippingDashboard() {
               }}
             >
               <p>
-                Clean up old registrations to avoid duplicate rates at checkout.
+                These can cause your customers to see duplicate shipping
+                options at checkout. Clicking <b>Clean up</b> removes the old
+                ones safely — your current rates are not affected.
               </p>
             </Banner>
           )}
 
           {/* ── Main Content ── */}
           <Tabs tabs={tabs} selected={selectedTab} onSelect={setSelectedTab}>
+            <Box paddingBlockStart="300" paddingInlineStart="400" paddingInlineEnd="400">
+              <Text tone="subdued" variant="bodySm">
+                {tabDescriptions[selectedTab]}
+              </Text>
+            </Box>
             <Box paddingBlockStart="400">
               {/* When Bulk Edit owns rule editing, lock the other tabs to
                   read-only so the two paths don't fight each other. Rules
@@ -771,13 +784,13 @@ export default function ShippingDashboard() {
                 <Box paddingBlockEnd="300">
                   <Banner
                     tone="info"
-                    title="Bulk Edit is active — zone-wise rules are paused"
+                    title="You're using the Excel spreadsheet right now"
                   >
                     <p>
-                      The Excel ruleset is what checkout uses right now. Your
-                      zone-wise rules below are preserved exactly as they are
-                      and will take over again the moment Bulk Edit is turned
-                      off (from the Bulk Edit tab).
+                      Customers are seeing the rates you uploaded in the{" "}
+                      <b>Bulk edit</b> tab. The zone-by-zone settings on this
+                      page are saved but switched off until you turn Bulk edit
+                      off again — nothing here is lost.
                     </p>
                   </Banner>
                 </Box>
@@ -878,139 +891,249 @@ export default function ShippingDashboard() {
 
       {/* ── Documentation Modal ── */}
       <ui-modal id="docs-modal" variant="max">
-        <div style={{ padding: "32px 40px", fontFamily: "var(--font-sans)", maxHeight: "80vh", overflowY: "auto" }}>
-          <div style={{ marginBottom: "28px" }}>
-            <h1 style={{ fontSize: "1.8rem", fontWeight: 800, marginBottom: "6px" }}>shipofix Documentation</h1>
-            <p style={{ color: "#737373", fontSize: "1rem" }}>Complete guide to configuring your shipping rates</p>
-          </div>
-
-          <hr style={{ border: "none", borderTop: "1px solid #E5E5E5", margin: "24px 0" }} />
-
-          <h2 style={{ fontSize: "1.25rem", fontWeight: 700, marginBottom: "10px" }}>Overview</h2>
-          <p style={{ fontSize: "1rem", color: "#525252", lineHeight: 1.7, marginBottom: "20px" }}>
-            shipofix is a custom Carrier Service app for Shopify that lets you define dynamic shipping rates
-            per zone. It registers as a shipping rate provider and calculates rates at checkout based on cart
-            weight, total price, or item count.
-          </p>
-
-          <hr style={{ border: "none", borderTop: "1px solid #E5E5E5", margin: "24px 0" }} />
-
-          <h2 style={{ fontSize: "1.25rem", fontWeight: 700, marginBottom: "10px" }}>How It Works</h2>
-          <ol style={{ fontSize: "1rem", color: "#525252", lineHeight: 2, paddingLeft: "24px", marginBottom: "20px" }}>
-            <li>Create or select a <strong>Shipping Zone</strong> from the sidebar.</li>
-            <li>Choose a <strong>Logic Type</strong> for that zone.</li>
-            <li>Configure the rate parameters and select your <strong>Currency</strong>.</li>
-            <li>Click <strong>Save Rule</strong> — the rate will be applied at checkout automatically.</li>
-          </ol>
-
-          <hr style={{ border: "none", borderTop: "1px solid #E5E5E5", margin: "24px 0" }} />
-
-          <h2 style={{ fontSize: "1.25rem", fontWeight: 700, marginBottom: "16px" }}>Logic Types</h2>
-
-          <div style={{ marginBottom: "20px" }}>
-            <h3 style={{ fontSize: "1.05rem", fontWeight: 700, marginBottom: "6px" }}>1. Standard Flat Tier</h3>
-            <p style={{ fontSize: "0.95rem", color: "#525252", lineHeight: 1.7 }}>
-              A fixed shipping charge regardless of cart contents. Enter a flat rate amount and every order
-              shipping to this zone will use that rate.
+        <div className="shipofix-docs">
+          <div className="shipofix-docs-hero">
+            <h1>Shipofix help guide</h1>
+            <p>
+              A plain-English walk-through of how Shipofix decides what to
+              charge for shipping. Skim the section you need, or read it
+              top-to-bottom the first time.
             </p>
           </div>
 
-          <div style={{ marginBottom: "20px" }}>
-            <h3 style={{ fontSize: "1.05rem", fontWeight: 700, marginBottom: "6px" }}>2. Weight Based (Category)</h3>
-            <p style={{ fontSize: "0.95rem", color: "#525252", lineHeight: 1.7 }}>
-              Define weight ranges (slabs) with different rates. For example: 0–5 kg = ₹50, 5–10 kg = ₹80.
-              The app matches the cart's total weight (converted from grams to kg) against your ranges.
+          <nav className="shipofix-docs-toc" aria-label="Help guide sections">
+            <div className="shipofix-docs-toc-label">Jump to</div>
+            <div className="shipofix-docs-toc-links">
+              <a href="#docs-quickstart">Quick start</a>
+              <a href="#docs-zones">What is a zone?</a>
+              <a href="#docs-models">The 6 pricing models</a>
+              <a href="#docs-bulk">Bulk edit (Excel)</a>
+              <a href="#docs-currency">Currency</a>
+              <a href="#docs-connection">Checkout connection</a>
+              <a href="#docs-faq">FAQ</a>
+            </div>
+          </nav>
+
+          {/* ── Quick start ── */}
+          <section id="docs-quickstart" className="shipofix-docs-section">
+            <h2>Quick start · 4 steps</h2>
+            <ol className="shipofix-docs-steps">
+              <li>
+                <b>Pick a zone</b> from the list on the left of the{" "}
+                <i>Set up rates</i> tab. A zone is just a group of countries
+                that share the same shipping price.
+              </li>
+              <li>
+                <b>Choose a pricing model</b> from the dropdown — flat rate,
+                weight tiers, percent of cart, and so on.
+              </li>
+              <li>
+                <b>Type your price</b> in the fields that appear. The currency
+                you pick is shown next to every price box.
+              </li>
+              <li>
+                <b>Click &ldquo;Save shipping rate&rdquo;.</b> Customers see
+                the new price at checkout straight away.
+              </li>
+            </ol>
+            <div className="shipofix-docs-tip">
+              <b>Tip:</b> Want to edit lots of zones at once? Use the{" "}
+              <i>Bulk edit (Excel)</i> tab — see below.
+            </div>
+          </section>
+
+          {/* ── Zones ── */}
+          <section id="docs-zones" className="shipofix-docs-section">
+            <h2>What is a zone?</h2>
+            <p>
+              A zone groups together countries (and, if you want, individual
+              states or provinces) that share the same shipping price. For
+              example you might have a <b>Domestic</b> zone for your own
+              country, a <b>Neighbours</b> zone for nearby countries, and a{" "}
+              <b>Rest of world</b> zone for everything else.
             </p>
-          </div>
+            <ul className="shipofix-docs-bullets">
+              <li>
+                <b>Add a new zone</b> — click the &ldquo;Add new zone&rdquo;
+                button in the left panel and tick the countries.
+              </li>
+              <li>
+                <b>Change countries</b> — open a zone and click{" "}
+                &ldquo;Change countries&rdquo; in the top right.
+              </li>
+              <li>
+                <b>Delete a zone</b> — click &ldquo;Delete zone&rdquo;. The
+                zone is removed from your store&apos;s shipping settings.
+              </li>
+              <li>
+                <b>Use Shopify&apos;s own rates instead</b> — change the
+                pricing model dropdown to &ldquo;Shopify default&rdquo;. Your
+                zone is kept, but Shopify decides the price.
+              </li>
+            </ul>
+          </section>
 
-          <div style={{ marginBottom: "20px" }}>
-            <h3 style={{ fontSize: "1.05rem", fontWeight: 700, marginBottom: "6px" }}>3. Price Based (Category)</h3>
-            <p style={{ fontSize: "0.95rem", color: "#525252", lineHeight: 1.7 }}>
-              Define order value ranges with different rates. For example: ₹0–₹500 = ₹40, ₹500–₹2000 = ₹25.
-              The app matches the cart's total price against your ranges.
+          {/* ── Pricing models ── */}
+          <section id="docs-models" className="shipofix-docs-section">
+            <h2>The 6 pricing models</h2>
+            <p>
+              Each zone uses one of these. Pick the one that matches how you
+              normally quote shipping.
             </p>
-          </div>
+            <div className="shipofix-docs-model">
+              <h3>1 · Flat rate</h3>
+              <p>One price for every order to this zone, no matter what.</p>
+              <p className="shipofix-docs-example">Example: every order to the UK pays £6.</p>
+            </div>
+            <div className="shipofix-docs-model">
+              <h3>2 · Weight tiers</h3>
+              <p>
+                Different price for different weight bands. You set the bands
+                yourself — leave the top band&apos;s &ldquo;Up to&rdquo; blank
+                so it catches anything heavier.
+              </p>
+              <p className="shipofix-docs-example">
+                Example: 0–5 kg → 50 · 5–10 kg → 80 · 10 kg and up → 120.
+              </p>
+            </div>
+            <div className="shipofix-docs-model">
+              <h3>3 · Order-value tiers</h3>
+              <p>
+                Different price for different cart totals. Great for
+                free-shipping thresholds.
+              </p>
+              <p className="shipofix-docs-example">
+                Example: 0–999 → 99 · 1,000–4,999 → 49 · 5,000 and up → 0
+                (free).
+              </p>
+            </div>
+            <div className="shipofix-docs-model">
+              <h3>4 · Per kilogram</h3>
+              <p>We multiply the parcel weight (in kg) by your rate.</p>
+              <p className="shipofix-docs-example">
+                Example: rate 20 · a 3.5 kg cart charges 70.
+              </p>
+            </div>
+            <div className="shipofix-docs-model">
+              <h3>5 · Percentage of cart</h3>
+              <p>
+                Charge a fraction of the cart subtotal. Type the percent as a
+                decimal: <code>0.1</code> means 10%.
+              </p>
+              <p className="shipofix-docs-example">
+                Example: rate 0.1 · 800 cart → 80.
+              </p>
+            </div>
+            <div className="shipofix-docs-model">
+              <h3>6 · Per item</h3>
+              <p>Multiply the number of items in the cart by your rate.</p>
+              <p className="shipofix-docs-example">
+                Example: rate 15 · 4 items → 60.
+              </p>
+            </div>
+          </section>
 
-          <div style={{ marginBottom: "20px" }}>
-            <h3 style={{ fontSize: "1.05rem", fontWeight: 700, marginBottom: "6px" }}>4. Per KG Dynamic</h3>
-            <p style={{ fontSize: "0.95rem", color: "#525252", lineHeight: 1.7 }}>
-              Charges a rate per kilogram of cart weight.<br />
-              <strong>Formula:</strong> Total Weight (kg) × Rate per KG = Shipping Cost
+          {/* ── Bulk edit ── */}
+          <section id="docs-bulk" className="shipofix-docs-section">
+            <h2>Bulk edit (Excel)</h2>
+            <p>
+              If you have lots of zones, editing one at a time is slow. The{" "}
+              <i>Bulk edit (Excel)</i> tab lets you:
             </p>
-          </div>
-
-          <div style={{ marginBottom: "20px" }}>
-            <h3 style={{ fontSize: "1.05rem", fontWeight: 700, marginBottom: "6px" }}>5. Per Price Dynamic</h3>
-            <p style={{ fontSize: "0.95rem", color: "#525252", lineHeight: 1.7 }}>
-              Charges a percentage of the cart's total value.<br />
-              <strong>Formula:</strong> Cart Total × Percentage = Shipping Cost<br />
-              Example: 0.1 means 10% of order value.
+            <ol className="shipofix-docs-steps">
+              <li>Download a spreadsheet with every country and zone pre-filled.</li>
+              <li>Fill in the rule <b>Name</b>, <b>Pricing model</b>, <b>Currency</b> and <b>Price</b> on the rows you care about.</li>
+              <li>Upload the file. Shipofix replaces every bulk-edit rule with what you uploaded.</li>
+            </ol>
+            <div className="shipofix-docs-tip">
+              While bulk edit is on, the zone-by-zone settings in{" "}
+              <i>Set up rates</i> are paused — but kept safe. Turn bulk edit
+              off any time and they take over again.
+            </div>
+            <p>
+              The Bulk edit tab has its own detailed walkthrough (button:{" "}
+              <i>View documentation</i>) with examples and a country/zone
+              code lookup.
             </p>
-          </div>
+          </section>
 
-          <div style={{ marginBottom: "20px" }}>
-            <h3 style={{ fontSize: "1.05rem", fontWeight: 700, marginBottom: "6px" }}>6. Per Item Dynamic</h3>
-            <p style={{ fontSize: "0.95rem", color: "#525252", lineHeight: 1.7 }}>
-              Charges a fixed amount per item in the cart.<br />
-              <strong>Formula:</strong> Total Items × Rate per Item = Shipping Cost
+          {/* ── Currency ── */}
+          <section id="docs-currency" className="shipofix-docs-section">
+            <h2>Currency</h2>
+            <p>
+              Each zone has its own currency. Pick it from the dropdown when
+              setting up the price — the currency symbol shows next to every
+              price box so you never mix them up. Shopify converts the price
+              for your customer at checkout if their currency is different.
             </p>
-          </div>
+          </section>
 
-          <hr style={{ border: "none", borderTop: "1px solid #E5E5E5", margin: "24px 0" }} />
-
-          <h2 style={{ fontSize: "1.25rem", fontWeight: 700, marginBottom: "10px" }}>Zone Management</h2>
-          <ul style={{ fontSize: "1rem", color: "#525252", lineHeight: 2, paddingLeft: "24px", marginBottom: "20px" }}>
-            <li><strong>Create Zone</strong> — Click "+" or "Add new zone" to create a new shipping zone with countries.</li>
-            <li><strong>Edit Regions</strong> — Add or remove countries/provinces from an existing zone.</li>
-            <li><strong>Delete Zone</strong> — Removes the zone from Shopify's delivery profile.</li>
-            <li><strong>Shopify Default</strong> — Setting logic to "Shopify Default" removes the custom rule and lets Shopify handle rates natively.</li>
-          </ul>
-
-          <hr style={{ border: "none", borderTop: "1px solid #E5E5E5", margin: "24px 0" }} />
-
-          <h2 style={{ fontSize: "1.25rem", fontWeight: 700, marginBottom: "10px" }}>Rules Overview Tab</h2>
-          <p style={{ fontSize: "1rem", color: "#525252", lineHeight: 1.7, marginBottom: "20px" }}>
-            The "Rules Overview" tab shows a summary table of all zones with their logic type, scope (domestic/international),
-            and last updated date. Use the search bar and filters to find specific zones. Click "Edit" to jump to configuration, 
-            or "Reset" to remove a custom rule.
-          </p>
-
-          <hr style={{ border: "none", borderTop: "1px solid #E5E5E5", margin: "24px 0" }} />
-
-          <h2 style={{ fontSize: "1.25rem", fontWeight: 700, marginBottom: "10px" }}>Currency</h2>
-          <p style={{ fontSize: "1rem", color: "#525252", lineHeight: 1.7, marginBottom: "20px" }}>
-            Select the currency for your shipping rates from the dropdown. All 150+ ISO 4217 currencies are supported.
-            The currency code is shown as the prefix in rate input fields.
-          </p>
-
-          <hr style={{ border: "none", borderTop: "1px solid #E5E5E5", margin: "24px 0" }} />
-
-          <h2 style={{ fontSize: "1.25rem", fontWeight: 700, marginBottom: "10px" }}>Carrier Service</h2>
-          <p style={{ fontSize: "1rem", color: "#525252", lineHeight: 1.7, marginBottom: "16px" }}>
-            The app automatically registers a Carrier Service with Shopify. When a customer checks out,
-            Shopify sends the cart data to this app's <code style={{ background: "#F5F5F5", padding: "3px 8px", borderRadius: "4px", fontSize: "0.9rem" }}>/api/shipping</code> endpoint.
-            The app calculates the rate based on the matching zone's rules and returns it to checkout.
-          </p>
-          <p style={{ fontSize: "1rem", color: "#525252", lineHeight: 1.7, marginBottom: "20px" }}>
-            If you see a "duplicate shipping engine" warning banner, click "Fix and Deduplicate" to clean up
-            old carrier service registrations.
-          </p>
-
-          <hr style={{ border: "none", borderTop: "1px solid #E5E5E5", margin: "24px 0" }} />
-
-          <h2 style={{ fontSize: "1.25rem", fontWeight: 700, marginBottom: "10px" }}>Weight Conversion</h2>
-          <p style={{ fontSize: "1rem", color: "#525252", lineHeight: 1.7, marginBottom: "20px" }}>
-            Shopify sends product weights in grams. The app automatically converts grams → kilograms
-            (divides by 1000) before applying weight-based calculations.
-          </p>
-
-          <div style={{ padding: "18px 20px", background: "#F5F5F5", borderRadius: "12px", marginTop: "12px" }}>
-            <p style={{ fontSize: "0.95rem", color: "#737373", margin: 0 }}>
-              Need help? Contact the developer or check the app source code for technical details.
+          {/* ── Connection ── */}
+          <section id="docs-connection" className="shipofix-docs-section">
+            <h2>How Shipofix talks to your checkout</h2>
+            <p>
+              When a customer reaches checkout, Shopify asks Shipofix what to
+              charge. Shipofix looks up the right zone, applies the rate
+              you&apos;ve set, and sends the answer back. You don&apos;t need
+              to do anything — this happens automatically.
             </p>
+            <p>
+              If you ever see a yellow banner saying we found{" "}
+              <b>leftover shipping connections</b>, click <b>Clean up</b>.
+              It just removes old links so customers don&apos;t see duplicate
+              shipping options — none of your rates are touched.
+            </p>
+          </section>
+
+          {/* ── FAQ ── */}
+          <section id="docs-faq" className="shipofix-docs-section">
+            <h2>Frequently asked questions</h2>
+            <div className="shipofix-docs-faq">
+              <h3>Why is my weight number in kilograms, not grams?</h3>
+              <p>
+                Shopify stores product weights in grams, but most stores think
+                in kg. We do the conversion for you, so type your bands in kg.
+              </p>
+            </div>
+            <div className="shipofix-docs-faq">
+              <h3>I typed &ldquo;10&rdquo; for 10% and it charged 1000%. What happened?</h3>
+              <p>
+                The percentage model expects a decimal — type <code>0.1</code>{" "}
+                for 10%, not <code>10</code>. The field warns you if it spots
+                a number that looks too big.
+              </p>
+            </div>
+            <div className="shipofix-docs-faq">
+              <h3>What if a country isn&apos;t in any zone?</h3>
+              <p>
+                Customers from that country won&apos;t see a Shipofix rate.
+                Add the country to an existing zone, or create a{" "}
+                <b>Rest of world</b> zone to catch everything else.
+              </p>
+            </div>
+            <div className="shipofix-docs-faq">
+              <h3>Will my saved rates disappear if I turn bulk edit on?</h3>
+              <p>
+                No. Your zone-by-zone rates are kept exactly as they are.
+                Turning bulk edit off brings them back instantly.
+              </p>
+            </div>
+            <div className="shipofix-docs-faq">
+              <h3>How do I let Shopify handle a zone instead?</h3>
+              <p>
+                Change the pricing-model dropdown to <b>Shopify default</b>.
+                Shipofix steps aside for that zone and Shopify quotes its own
+                rate.
+              </p>
+            </div>
+          </section>
+
+          <div className="shipofix-docs-footnote">
+            Need a hand? Reach out to support — we&apos;re happy to help you
+            set things up.
           </div>
         </div>
-        <ui-title-bar title="Documentation">
+        <ui-title-bar title="Help guide">
           <button variant="primary" onClick={() => shopify.modal.hide("docs-modal")}>Close</button>
         </ui-title-bar>
       </ui-modal>

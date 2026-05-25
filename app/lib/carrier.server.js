@@ -44,7 +44,11 @@ export function getCallbackUrl() {
 export async function ensureCarrierService(admin) {
   const callbackUrl = getCallbackUrl();
   if (!callbackUrl)
-    return { state: "info", message: "SHOPIFY_APP_URL not set." };
+    return {
+      state: "info",
+      message:
+        "Shipofix isn't fully connected yet — your developer needs to set the app URL before checkout can fetch rates.",
+    };
 
   try {
     const queryResponse = await admin.graphql(QUERY_CARRIER_SERVICES);
@@ -66,7 +70,8 @@ export async function ensureCarrierService(admin) {
     if (exactMatch) {
       return {
         state: "success",
-        message: `Carrier service active: ${exactMatch.name}`,
+        message:
+          "Shipofix is connected to your checkout — customers will see the rates you configure here.",
         staleServices: otherStale,
       };
     }
@@ -86,7 +91,7 @@ export async function ensureCarrierService(admin) {
       }
       return {
         state: "success",
-        message: "Carrier service URL updated to current tunnel.",
+        message: "Shipofix reconnected to your checkout.",
         staleServices: otherStale,
       };
     }
@@ -104,13 +109,14 @@ export async function ensureCarrierService(admin) {
     });
     return {
       state: "success",
-      message: "Carrier service registered.",
+      message:
+        "Shipofix is now connected to your checkout — rates you configure here will be used.",
       staleServices: otherStale,
     };
   } catch (error) {
     return {
       state: "warning",
-      message: `Carrier service check failed: ${error.message}`,
+      message: `We couldn't connect Shipofix to your checkout: ${error.message}. Try refreshing — if it keeps happening, contact support.`,
       staleServices: [],
     };
   }

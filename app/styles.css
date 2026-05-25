@@ -967,6 +967,189 @@ body {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
+   SHIPOFIX HELP / DOCS MODAL
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.shipofix-docs {
+  padding: 28px 36px 32px;
+  font-family: var(--font-sans);
+  max-height: 80vh;
+  overflow-y: auto;
+  color: var(--text-primary);
+}
+
+.shipofix-docs-hero h1 {
+  font-size: 1.6rem;
+  font-weight: 800;
+  margin: 0 0 6px;
+  letter-spacing: -0.01em;
+}
+
+.shipofix-docs-hero p {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  line-height: 1.55;
+  margin: 0;
+  max-width: 60ch;
+}
+
+.shipofix-docs-toc {
+  margin-top: 22px;
+  padding: 12px 14px;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.shipofix-docs-toc-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-muted);
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.shipofix-docs-toc-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+}
+
+.shipofix-docs-toc-links a {
+  font-size: 0.82rem;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: var(--radius-full);
+  color: var(--text-primary);
+  text-decoration: none;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.shipofix-docs-toc-links a:hover {
+  background: var(--gray-100);
+  border-color: var(--text-primary);
+}
+
+.shipofix-docs-section {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.shipofix-docs-section:first-of-type {
+  border-top: none;
+  padding-top: 8px;
+}
+
+.shipofix-docs-section h2 {
+  font-size: 1.2rem;
+  font-weight: 700;
+  margin: 0 0 12px;
+  letter-spacing: -0.01em;
+}
+
+.shipofix-docs-section p {
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+  line-height: 1.65;
+  margin: 0 0 12px;
+  max-width: 68ch;
+}
+
+.shipofix-docs-steps,
+.shipofix-docs-bullets {
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  padding-left: 22px;
+  margin: 0 0 14px;
+}
+
+.shipofix-docs-steps > li,
+.shipofix-docs-bullets > li {
+  margin-bottom: 8px;
+}
+
+.shipofix-docs-tip {
+  margin: 14px 0;
+  padding: 12px 14px;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--black);
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  line-height: 1.55;
+}
+
+.shipofix-docs-model {
+  padding: 14px 16px;
+  margin: 0 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.shipofix-docs-model h3 {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0 0 4px;
+}
+
+.shipofix-docs-model p {
+  margin: 0 0 4px;
+  font-size: 0.9rem;
+}
+
+.shipofix-docs-example {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+  color: var(--text-primary);
+  background: var(--gray-100);
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  border-radius: var(--radius-xs);
+  display: inline-block;
+}
+
+.shipofix-docs-faq {
+  margin: 0 0 14px;
+}
+
+.shipofix-docs-faq h3 {
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin: 0 0 4px;
+  color: var(--text-primary);
+}
+
+.shipofix-docs-faq p {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.shipofix-docs code {
+  background: var(--gray-100);
+  border: 1px solid var(--border);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+.shipofix-docs-footnote {
+  margin-top: 28px;
+  padding: 14px 16px;
+  background: var(--surface-tertiary);
+  border-radius: var(--radius-md);
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
    RESPONSIVE
    ═══════════════════════════════════════════════════════════════════════ */
 

@@ -16,6 +16,17 @@ import {
   PlusIcon,
 } from "@shopify/polaris-icons";
 
+/* Short, friendly labels for the rule preview line under each zone name.
+   Keys mirror the internal logicType strings written by LogicEditor. */
+const LOGIC_LABELS = {
+  STANDARD_TIER: "flat price",
+  WEIGHT_RANGE: "weight tiers",
+  PRICE_RANGE: "order-value tiers",
+  WEIGHT_MULTIPLIER: "per kilogram",
+  PRICE_MULTIPLIER: "% of cart",
+  ITEM_MULTIPLIER: "per item",
+};
+
 export default function ZoneSidebar({
   zones,
   selectedZoneId,
@@ -29,7 +40,7 @@ export default function ZoneSidebar({
     <Card padding="0">
       <div className="zone-sidebar-header">
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <h3>Shipping Zones</h3>
+          <h3>Your zones</h3>
           <span
             style={{
               fontSize: "0.65rem",
@@ -61,7 +72,9 @@ export default function ZoneSidebar({
         {zones.length === 0 ? (
           <div style={{ padding: "32px 20px", textAlign: "center" }}>
             <Text variant="bodySm" tone="subdued">
-              No shipping zones yet. Create one to start configuring rates.
+              You don&apos;t have any shipping zones yet. Click{" "}
+              <b>Add new zone</b> below to group the countries you ship to,
+              then come back to set their prices.
             </Text>
           </div>
         ) : (
@@ -94,15 +107,15 @@ export default function ZoneSidebar({
                   {z.countries.length === 1 ? "country" : "countries"}
                   {z.rule && (
                     <span style={{ color: "#737373", marginLeft: "6px" }}>
-                      · {z.rule.logicType.replace(/_/g, " ").toLowerCase()}
+                      · {LOGIC_LABELS[z.rule.logicType] || z.rule.logicType.replace(/_/g, " ").toLowerCase()}
                     </span>
                   )}
                 </div>
               </div>
               {z.rule ? (
-                <span className="zone-badge custom">Custom</span>
+                <span className="zone-badge custom">Your rate</span>
               ) : (
-                <span className="zone-badge default">Default</span>
+                <span className="zone-badge default">Shopify default</span>
               )}
             </div>
           ))
@@ -114,7 +127,9 @@ export default function ZoneSidebar({
           <Divider />
           <div style={{ padding: "10px 20px" }}>
             <Text variant="bodySm" tone="subdued">
-              {customCount} of {zones.length} zones with custom rules
+              {customCount} of {zones.length}{" "}
+              {zones.length === 1 ? "zone has" : "zones have"} a price set —
+              the rest use Shopify&apos;s default rates.
             </Text>
           </div>
         </>

@@ -22,14 +22,31 @@ import {
   PlusIcon,
 } from "@shopify/polaris-icons";
 
+/* Vendor-facing labels for each pricing model. The value strings are the
+   internal contract with the carrier service — don't change them. */
 const LOGIC_TYPES = [
-  { label: "Standard Flat Tier", value: "STANDARD_TIER" },
-  { label: "Weight Based (Category)", value: "WEIGHT_RANGE" },
-  { label: "Price Based (Category)", value: "PRICE_RANGE" },
-  { label: "Per KG Dynamic", value: "WEIGHT_MULTIPLIER" },
-  { label: "Per Price Dynamic", value: "PRICE_MULTIPLIER" },
-  { label: "Per Item Dynamic", value: "ITEM_MULTIPLIER" },
+  { label: "Flat rate — one price per order", value: "STANDARD_TIER" },
+  { label: "Weight tiers — different price per weight band", value: "WEIGHT_RANGE" },
+  { label: "Order-value tiers — different price per cart total", value: "PRICE_RANGE" },
+  { label: "Per kilogram — multiply weight × rate", value: "WEIGHT_MULTIPLIER" },
+  { label: "% of cart — charge a percentage of order value", value: "PRICE_MULTIPLIER" },
+  { label: "Per item — multiply item count × rate", value: "ITEM_MULTIPLIER" },
 ];
+
+const LOGIC_HELP = {
+  STANDARD_TIER:
+    "Same shipping price for every order to this zone, no matter what's in the cart.",
+  WEIGHT_RANGE:
+    "Set price bands by parcel weight. Example: 0–5 kg → 50, 5–10 kg → 80, 10 kg+ → 120.",
+  PRICE_RANGE:
+    "Set price bands by cart total. Useful for free-shipping thresholds (e.g. over 1,000 → 0).",
+  WEIGHT_MULTIPLIER:
+    "Cost scales with weight. A 3.5 kg cart at a rate of 20 charges 70.",
+  PRICE_MULTIPLIER:
+    "Cost is a percentage of the cart. Enter the percent as a decimal — 0.1 = 10%.",
+  ITEM_MULTIPLIER:
+    "Cost scales with how many items are in the cart. 4 items at a rate of 15 charges 60.",
+};
 
 const ALL_CURRENCIES = [
   { code: "AED", symbol: "د.إ", name: "UAE Dirham" },
@@ -216,10 +233,11 @@ export default function LogicEditor({
           <div className="empty-state-icon">
             <Icon source={GlobeIcon} tone="info" />
           </div>
-          <h3>No zone selected</h3>
+          <h3>Pick a zone to get started</h3>
           <p>
-            Select a zone from the panel to configure its shipping logic, or
-            create a new one.
+            A <b>zone</b> is a group of countries (or states / provinces) that
+            share the same shipping price. Choose one on the left, or add a
+            new one — then come back here to decide what to charge.
           </p>
           <Button
             variant="primary"
@@ -227,7 +245,7 @@ export default function LogicEditor({
             icon={PlusIcon}
             disabled={disabled}
           >
-            Create Zone
+            Add a new zone
           </Button>
         </div>
       </Card>
@@ -282,7 +300,7 @@ export default function LogicEditor({
       case "STANDARD_TIER":
         return (
           <TextField
-            label="Flat Rate Amount"
+            label="Shipping price"
             type="number"
             min="0"
             value={rules.flat_rate || ""}
@@ -290,7 +308,7 @@ export default function LogicEditor({
             autoComplete="off"
             prefix={currency}
             disabled={disabled}
-            helpText="Every order to this zone uses this rate."
+            helpText="Every order shipping to this zone pays this amount."
           />
         );
 
@@ -327,7 +345,7 @@ export default function LogicEditor({
                   <InlineStack gap="200" blockAlign="center">
                     <Box minWidth="100px">
                       <TextField
-                        label={isWeight ? "Min (kg)" : "Min Total"}
+                        label={isWeight ? "From (kg)" : "From (cart total)"}
                         type="number"
                         min="0"
                         value={minVal ?? ""}
@@ -343,7 +361,7 @@ export default function LogicEditor({
                     </Box>
                     <Box minWidth="100px">
                       <TextField
-                        label={isWeight ? "Max (kg)" : "Max Total"}
+                        label={isWeight ? "Up to (kg)" : "Up to (cart total)"}
                         type="number"
                         min="0"
                         value={maxVal ?? ""}
@@ -354,13 +372,13 @@ export default function LogicEditor({
                           setRules(nb);
                         }}
                         autoComplete="off"
-                        placeholder="Infinity"
+                        placeholder="Leave blank for no limit"
                         disabled={disabled}
                       />
                     </Box>
                     <Box minWidth="100px">
                       <TextField
-                        label="Rate"
+                        label="Price"
                         type="number"
                         min="0"
                         value={band.rate ?? ""}
@@ -388,8 +406,9 @@ export default function LogicEditor({
                   </InlineStack>
                   {minMaxInvalid && (
                     <Text tone="critical" variant="bodySm">
-                      Min must be less than Max. Leave Max blank for an
-                      open-ended top band.
+                      &ldquo;From&rdquo; must be smaller than &ldquo;Up to&rdquo;.
+                      Leave &ldquo;Up to&rdquo; blank on your top band if you
+                      want it to cover everything above the previous range.
                     </Text>
                   )}
                 </BlockStack>
@@ -407,7 +426,7 @@ export default function LogicEditor({
               }
               disabled={disabled}
             >
-              Add Range
+              Add another band
             </Button>
           </BlockStack>
         );
@@ -416,7 +435,7 @@ export default function LogicEditor({
       case "WEIGHT_MULTIPLIER":
         return (
           <TextField
-            label="Rate per KG"
+            label="Price per kilogram"
             type="number"
             min="0"
             value={rules.rate_per_kg || ""}
@@ -424,7 +443,7 @@ export default function LogicEditor({
             autoComplete="off"
             prefix={currency}
             disabled={disabled}
-            helpText="Total weight (kg) × this rate = shipping cost."
+            helpText="We multiply the parcel's total weight by this number. A 3.5 kg cart at 20 charges 70."
           />
         );
 
@@ -433,7 +452,7 @@ export default function LogicEditor({
         const pctSuspicious = Number.isFinite(pctN) && pctN > 1;
         return (
           <TextField
-            label="Percentage (e.g. 0.1 for 10%)"
+            label="Percentage of cart total (as a decimal)"
             type="number"
             min="0"
             step="0.01"
@@ -443,10 +462,10 @@ export default function LogicEditor({
             disabled={disabled}
             helpText={
               pctSuspicious
-                ? `Reads as ${(pctN * 100).toFixed(0)}% of cart total — if you meant 10%, enter 0.1.`
-                : "Cart total × this fraction = shipping cost. 0.1 means 10%."
+                ? `That's ${(pctN * 100).toFixed(0)}% of every order — if you wanted 10%, type 0.1 instead.`
+                : "Type as a decimal: 0.1 = 10%, 0.05 = 5%. We multiply the cart subtotal by this."
             }
-            error={pctSuspicious ? "Looks like a whole percent — should this be a decimal?" : undefined}
+            error={pctSuspicious ? "Looks like you typed a whole percent. Try 0.1 for 10%." : undefined}
           />
         );
       }
@@ -454,14 +473,14 @@ export default function LogicEditor({
       case "ITEM_MULTIPLIER":
         return (
           <TextField
-            label="Rate per Item"
+            label="Price per item"
             type="number"
             min="0"
             value={rules.rate_per_item || ""}
             onChange={(v) => setRules({ ...rules, rate_per_item: v })}
             autoComplete="off"
             prefix={currency}
-            helpText="Shipping cost charged for each item in the cart."
+            helpText="We multiply how many items are in the cart by this. 4 items at 15 charges 60."
             disabled={disabled}
           />
         );
@@ -479,8 +498,9 @@ export default function LogicEditor({
           <div>
             <div className="editor-title">{activeZone.name}</div>
             <div className="brand-subtitle" style={{ marginTop: "2px" }}>
-              {activeZone.isDomestic ? "Domestic Zone" : "International Zone"} ·{" "}
-              {activeZone.countries.length} countries
+              {activeZone.isDomestic ? "Inside your home country" : "International"} ·{" "}
+              {activeZone.countries.length}{" "}
+              {activeZone.countries.length === 1 ? "country" : "countries"}
             </div>
           </div>
           <div className="editor-actions">
@@ -490,7 +510,7 @@ export default function LogicEditor({
               onClick={() => onEditRegions(activeZone)}
               disabled={disabled}
             >
-              Edit Regions
+              Change countries
             </Button>
             <Button
               variant="plain"
@@ -499,7 +519,7 @@ export default function LogicEditor({
               onClick={() => onDeleteZone(activeZone.id)}
               disabled={disabled}
             >
-              Delete
+              Delete zone
             </Button>
           </div>
         </div>
@@ -514,7 +534,7 @@ export default function LogicEditor({
             ))
           ) : (
             <Text tone="subdued" variant="bodySm">
-              No countries assigned — click "Edit Regions" to add
+              No countries in this zone yet — click &ldquo;Change countries&rdquo; to add some.
             </Text>
           )}
         </div>
@@ -523,9 +543,10 @@ export default function LogicEditor({
 
         {/* Logic Type Selector */}
         <Select
-          label="Logic Type"
+          label="How do you want to charge for this zone?"
+          helpText="Choose Shopify default to hand pricing back to Shopify's built-in rates."
           options={[
-            { label: "Shopify Default", value: "DEFAULT" },
+            { label: "Shopify default (use Shopify's own rates)", value: "DEFAULT" },
             ...LOGIC_TYPES,
           ]}
           value={activeZone.rule ? logicType : "DEFAULT"}
@@ -538,6 +559,18 @@ export default function LogicEditor({
           }}
           disabled={disabled}
         />
+
+        {logicType !== "DEFAULT" && LOGIC_HELP[logicType] && (
+          <Box
+            padding="300"
+            background="bg-surface-secondary"
+            borderRadius="200"
+          >
+            <Text tone="subdued" variant="bodySm">
+              {LOGIC_HELP[logicType]}
+            </Text>
+          </Box>
+        )}
 
         {logicType !== "DEFAULT" && (
           <BlockStack gap="400">
@@ -556,7 +589,7 @@ export default function LogicEditor({
             <InlineStack align="end" gap="200" blockAlign="center">
               {isSaveDisabled && !isSaving && (
                 <Text tone="subdued" variant="bodySm">
-                  Fill in the required fields to save.
+                  Fill in the price fields above before saving.
                 </Text>
               )}
               <Button
@@ -565,7 +598,7 @@ export default function LogicEditor({
                 loading={isSaving}
                 disabled={disabled || isSaveDisabled}
               >
-                Save Rule
+                Save shipping rate
               </Button>
             </InlineStack>
           </BlockStack>

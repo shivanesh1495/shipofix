@@ -255,14 +255,47 @@ export default function BulkEdit({
 
   return (
     <BlockStack gap="400">
-      {/* Two-column layout: LEFT = action (upload + results), RIGHT = setup
-          (toggle, docs pointer, template download, last-upload file). The
-          grid collapses to a single column on narrow widths via the
-          bulk-edit-split CSS class. */}
+      {/* Two-column layout. LEFT column holds the full workflow top-to-
+          bottom: Step 1 (download) → Step 2 (upload) → result banners.
+          RIGHT column holds context that doesn't move with the flow:
+          the feature toggle, the docs pointer, and the last-upload file
+          (when a previous upload exists). Collapses to one column under
+          980 px via the bulk-edit-split CSS class. */}
       <div className="bulk-edit-split">
-        {/* ── LEFT column: Step 2 upload + result banners ── */}
+        {/* ── LEFT column: Step 1 → Step 2 → results ── */}
         <div className="bulk-edit-split-col">
           <BlockStack gap="400">
+            {/* Step 1: download */}
+            <Card>
+              <BlockStack gap="300">
+                <InlineStack align="space-between" blockAlign="center" gap="400" wrap={false}>
+                  <Text variant="headingMd" as="h3">
+                    Step 1 · Download the template
+                  </Text>
+                  <InlineStack gap="200" wrap={false}>
+                    <Button onClick={() => setDocsOpen(true)}>
+                      View documentation
+                    </Button>
+                    <Button
+                      variant="primary"
+                      loading={downloading}
+                      onClick={handleDownloadTemplate}
+                      accessibilityLabel="Download Excel template"
+                    >
+                      Download .xlsx
+                    </Button>
+                  </InlineStack>
+                </InlineStack>
+                <Text tone="subdued">
+                  The workbook ships with four sheets: <b>Bulk Edit</b> (coverage +
+                  logic, with Country / Zone dropdowns pre-filled), <b>Rate Bands</b>{" "}
+                  (slabs for Logic 2 &amp; 3 — one row per band, linked by Name),{" "}
+                  <b>All Regions</b> (read-only reference), and <b>Instructions</b>.
+                  Fill in only the rows you need.
+                </Text>
+              </BlockStack>
+            </Card>
+
             {/* Step 2: upload */}
             <Card>
               <BlockStack gap="300">
@@ -325,7 +358,7 @@ export default function BulkEdit({
           </BlockStack>
         </div>
 
-        {/* ── RIGHT column: setup (toggle, docs, download, last upload) ── */}
+        {/* ── RIGHT column: feature toggle, docs pointer, last upload ── */}
         <div className="bulk-edit-split-col">
           <BlockStack gap="400">
             {/* Feature toggle — managed by app, kept beside the workflow itself */}
@@ -369,37 +402,6 @@ export default function BulkEdit({
                 &amp; 3) — and lists every Logic # and country / zone code.
               </Text>
             </Banner>
-
-            {/* Step 1: download */}
-            <Card>
-              <BlockStack gap="300">
-                <InlineStack align="space-between" blockAlign="center" gap="400" wrap={false}>
-                  <Text variant="headingMd" as="h3">
-                    Step 1 · Download the template
-                  </Text>
-                  <InlineStack gap="200" wrap={false}>
-                    <Button onClick={() => setDocsOpen(true)}>
-                      View documentation
-                    </Button>
-                    <Button
-                      variant="primary"
-                      loading={downloading}
-                      onClick={handleDownloadTemplate}
-                      accessibilityLabel="Download Excel template"
-                    >
-                      Download .xlsx
-                    </Button>
-                  </InlineStack>
-                </InlineStack>
-                <Text tone="subdued">
-                  The workbook ships with four sheets: <b>Bulk Edit</b> (coverage +
-                  logic, with Country / Zone dropdowns pre-filled), <b>Rate Bands</b>{" "}
-                  (slabs for Logic 2 &amp; 3 — one row per band, linked by Name),{" "}
-                  <b>All Regions</b> (read-only reference), and <b>Instructions</b>.
-                  Fill in only the rows you need.
-                </Text>
-              </BlockStack>
-            </Card>
 
             {/* Last upload — only when a previous file is stored */}
             {lastUpload && (

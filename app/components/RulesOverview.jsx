@@ -18,7 +18,7 @@ import {
   TextField,
 } from "@shopify/polaris";
 import { DeleteIcon, PlusIcon, SearchIcon } from "@shopify/polaris-icons";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFetcher, useRevalidator } from "react-router";
 
 const LOGIC_TYPES = [
@@ -264,6 +264,10 @@ export default function RulesOverview({
   /* ── Inline edit modal state ─────────────────────────────────────────── */
   const editFetcher = useFetcher();
   const revalidator = useRevalidator();
+  /* Carries the optimistic patch from submit-time to success-effect-time so
+     the table can update the instant the action returns, without re-reading
+     form state that may have been reset by then. */
+  const pendingPatchRef = useRef(null);
   const [editingRuleId, setEditingRuleId] = useState(null);
   const [editName, setEditName] = useState("");
   const [editCurrency, setEditCurrency] = useState("USD");
@@ -373,26 +377,99 @@ export default function RulesOverview({
       rulesPayload = JSON.stringify({ [rateField]: rateN });
     }
 
+    /* Stash the optimistic patch keyed by rule id so the table can re-render
+       with the new values immediately on success — no waiting for the
+       loader to revalidate. */
+    const optimisticPatch = {
+      name: trimmedName,
+      currency: cur,
+      rulesJson: rulesPayload,
+    };
     const body = new FormData();
     body.set("intent", "edit_rule");
     body.set("id", editingRule.id);
     body.set("name", trimmedName);
     body.set("currency", cur);
     body.set("rulesJson", rulesPayload);
+    body.set("_optimisticRuleId", editingRule.id);
+    /* Remember the patch on the ref so the success effect can apply it
+       without having to re-derive it from form state (which may have
+       reset by then). */
+    pendingPatchRef.current = { id: editingRule.id, patch: optimisticPatch };
     editFetcher.submit(body, { method: "POST", action: "/app/bulk-edit" });
   }, [editingRule, editingIsRange, editName, editCurrency, editRate, editBands, editFetcher]);
 
-  /* Close + revalidate on a successful save; surface the server error on
-     failure so the user sees what to fix. */
+  /* Track the data ref we've already reacted to so a stale {success: true}
+     from a previous save doesn't trigger anything on later renders. */
+  const [lastHandledEdit, setLastHandledEdit] = useState(null);
+
+  /* Optimistic overrides keyed by rule id. Applied on top of bulkRules so
+     the user sees their edit reflected in the table the instant Save
+     returns, without waiting for the loader to revalidate. Cleared when
+     the prop bulkRules catches up (the real data matches the override). */
+  const [optimisticEdits, setOptimisticEdits] = useState({});
+
+  /* Merge optimistic edits onto the canonical bulkRules. As soon as the
+     prop catches up to what the user typed, the override is dropped so we
+     don't keep masking real updates from other sources. */
+  const displayedBulkRules = useMemo(() => {
+    if (Object.keys(optimisticEdits).length === 0) return bulkRules;
+    return bulkRules.map((r) => {
+      const ovr = optimisticEdits[r.id];
+      return ovr ? { ...r, ...ovr } : r;
+    });
+  }, [bulkRules, optimisticEdits]);
+
+  /* Drop optimistic overrides for rules whose canonical data now matches.
+     Comparing rulesJson + name + currency is enough — those are the only
+     fields the inline editor changes. */
   useEffect(() => {
-    if (editFetcher.state !== "idle" || !editFetcher.data) return;
+    setOptimisticEdits((prev) => {
+      const keys = Object.keys(prev);
+      if (keys.length === 0) return prev;
+      let changed = false;
+      const next = { ...prev };
+      for (const k of keys) {
+        const real = bulkRules.find((r) => r.id === k);
+        const ovr = prev[k];
+        if (
+          real &&
+          real.name === ovr.name &&
+          real.currency === ovr.currency &&
+          real.rulesJson === ovr.rulesJson
+        ) {
+          delete next[k];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [bulkRules]);
+
+  /* On success: apply the optimistic patch (instant table update), pop a
+     toast, close the modal, then kick off background revalidation so the
+     canonical loader data eventually catches up. No page reload — the
+     user sees the new rate the moment Save returns. */
+  useEffect(() => {
+    if (editFetcher.state !== "idle") return;
+    if (!editFetcher.data || editFetcher.data === lastHandledEdit) return;
+    setLastHandledEdit(editFetcher.data);
     if (editFetcher.data.success) {
+      const pending = pendingPatchRef.current;
+      if (pending) {
+        setOptimisticEdits((prev) => ({ ...prev, [pending.id]: pending.patch }));
+        pendingPatchRef.current = null;
+      }
+      if (typeof window !== "undefined" && window.shopify?.toast?.show) {
+        window.shopify.toast.show(editFetcher.data.message || "Rule updated");
+      }
       closeEdit();
       revalidator.revalidate();
     } else if (editFetcher.data.error) {
+      pendingPatchRef.current = null;
       setEditError(editFetcher.data.error);
     }
-  }, [editFetcher.state, editFetcher.data, closeEdit, revalidator]);
+  }, [editFetcher.state, editFetcher.data, lastHandledEdit, closeEdit, revalidator]);
 
   const saving = editFetcher.state === "submitting" || editFetcher.state === "loading";
   /* Spreadsheet-style rows for Bulk-Edit mode. Sort rules first so the
@@ -400,7 +477,7 @@ export default function RulesOverview({
   const bulkRows = useMemo(() => {
     if (!bulkMode) return [];
 
-    let rules = [...bulkRules];
+    let rules = [...displayedBulkRules];
 
     if (filterType !== "ALL") {
       rules = rules.filter((r) => r.logicType === filterType);
@@ -438,7 +515,7 @@ export default function RulesOverview({
     }
 
     return rows;
-  }, [bulkMode, bulkRules, searchQuery, filterType, sortOrder]);
+  }, [bulkMode, displayedBulkRules, searchQuery, filterType, sortOrder]);
 
   const filteredZones = useMemo(() => {
     let result = zones.map((z) => ({
@@ -529,6 +606,7 @@ export default function RulesOverview({
                     "numeric",
                     "numeric",
                     "numeric",
+                    "text",
                   ]}
                   headings={[
                     "Name",
@@ -539,25 +617,12 @@ export default function RulesOverview({
                     "Min",
                     "Max",
                     "Rate",
+                    "Actions",
                   ]}
                   rows={bulkRows.map((r, i) => [
-                    r.ruleId ? (
-                      <InlineStack key={`n-${i}`} gap="200" blockAlign="center" wrap={false}>
-                        <Text fontWeight="semibold">{r.name}</Text>
-                        <Button
-                          size="micro"
-                          variant="tertiary"
-                          onClick={() => openEdit(r.ruleId)}
-                          disabled={saving}
-                        >
-                          Edit
-                        </Button>
-                      </InlineStack>
-                    ) : (
-                      <Text key={`n-${i}`} fontWeight={r.name ? "semibold" : "regular"}>
-                        {r.name}
-                      </Text>
-                    ),
+                    <Text key={`n-${i}`} fontWeight={r.name ? "semibold" : "regular"}>
+                      {r.name}
+                    </Text>,
                     r.country || "",
                     r.zone || "",
                     r.logic !== "" ? (
@@ -569,6 +634,24 @@ export default function RulesOverview({
                     r.min === "" || r.min == null ? "" : String(r.min),
                     r.max === "" || r.max == null ? "" : String(r.max),
                     r.rate === "" || r.rate == null ? "" : String(r.rate),
+                    /* Edit button lives in its own Actions column so the
+                       Name column stays narrow and Country / Zone / values
+                       line up cleanly across rule and coverage rows. Only
+                       the leading row of each rule shows it. */
+                    r.ruleId ? (
+                      <Button
+                        key={`e-${i}`}
+                        size="micro"
+                        variant="primary"
+                        tone="success"
+                        onClick={() => openEdit(r.ruleId)}
+                        disabled={saving}
+                      >
+                        Edit
+                      </Button>
+                    ) : (
+                      ""
+                    ),
                   ])}
                 />
                 {bulkRows.length === 0 && (

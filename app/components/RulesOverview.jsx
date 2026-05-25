@@ -19,7 +19,7 @@ import {
 } from "@shopify/polaris";
 import { DeleteIcon, PlusIcon, SearchIcon } from "@shopify/polaris-icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useFetcher, useRevalidator } from "react-router";
+import { useFetcher } from "react-router";
 
 const LOGIC_TYPES = [
   { label: "Standard Flat Tier", value: "STANDARD_TIER" },
@@ -258,15 +258,15 @@ export default function RulesOverview({
   setSortOrder,
   onEditZone,
   onDeleteRule,
+  onBulkRuleEdited,
   disabled = false,
   bulkMode = false,
 }) {
   /* ── Inline edit modal state ─────────────────────────────────────────── */
   const editFetcher = useFetcher();
-  const revalidator = useRevalidator();
   /* Carries the optimistic patch from submit-time to success-effect-time so
-     the table can update the instant the action returns, without re-reading
-     form state that may have been reset by then. */
+     the parent's setter sees the right rule id even after the form state
+     in this component has been reset by closeEdit. */
   const pendingPatchRef = useRef(null);
   const [editingRuleId, setEditingRuleId] = useState(null);
   const [editName, setEditName] = useState("");
@@ -403,73 +403,28 @@ export default function RulesOverview({
      from a previous save doesn't trigger anything on later renders. */
   const [lastHandledEdit, setLastHandledEdit] = useState(null);
 
-  /* Optimistic overrides keyed by rule id. Applied on top of bulkRules so
-     the user sees their edit reflected in the table the instant Save
-     returns, without waiting for the loader to revalidate. Cleared when
-     the prop bulkRules catches up (the real data matches the override). */
-  const [optimisticEdits, setOptimisticEdits] = useState({});
-
-  /* Merge optimistic edits onto the canonical bulkRules. As soon as the
-     prop catches up to what the user typed, the override is dropped so we
-     don't keep masking real updates from other sources. */
-  const displayedBulkRules = useMemo(() => {
-    if (Object.keys(optimisticEdits).length === 0) return bulkRules;
-    return bulkRules.map((r) => {
-      const ovr = optimisticEdits[r.id];
-      return ovr ? { ...r, ...ovr } : r;
-    });
-  }, [bulkRules, optimisticEdits]);
-
-  /* Drop optimistic overrides for rules whose canonical data now matches.
-     Comparing rulesJson + name + currency is enough — those are the only
-     fields the inline editor changes. */
-  useEffect(() => {
-    setOptimisticEdits((prev) => {
-      const keys = Object.keys(prev);
-      if (keys.length === 0) return prev;
-      let changed = false;
-      const next = { ...prev };
-      for (const k of keys) {
-        const real = bulkRules.find((r) => r.id === k);
-        const ovr = prev[k];
-        if (
-          real &&
-          real.name === ovr.name &&
-          real.currency === ovr.currency &&
-          real.rulesJson === ovr.rulesJson
-        ) {
-          delete next[k];
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
-  }, [bulkRules]);
-
-  /* On success: apply the optimistic patch (instant table update), pop a
-     toast, close the modal, then kick off background revalidation so the
-     canonical loader data eventually catches up. No page reload — the
-     user sees the new rate the moment Save returns. */
+  /* On success: hand the optimistic patch up to the parent (which holds
+     the state so it survives tab switches), pop a toast, close the modal.
+     The parent also triggers loader revalidation. */
   useEffect(() => {
     if (editFetcher.state !== "idle") return;
     if (!editFetcher.data || editFetcher.data === lastHandledEdit) return;
     setLastHandledEdit(editFetcher.data);
     if (editFetcher.data.success) {
       const pending = pendingPatchRef.current;
-      if (pending) {
-        setOptimisticEdits((prev) => ({ ...prev, [pending.id]: pending.patch }));
-        pendingPatchRef.current = null;
+      if (pending && onBulkRuleEdited) {
+        onBulkRuleEdited(pending.id, pending.patch);
       }
+      pendingPatchRef.current = null;
       if (typeof window !== "undefined" && window.shopify?.toast?.show) {
         window.shopify.toast.show(editFetcher.data.message || "Rule updated");
       }
       closeEdit();
-      revalidator.revalidate();
     } else if (editFetcher.data.error) {
       pendingPatchRef.current = null;
       setEditError(editFetcher.data.error);
     }
-  }, [editFetcher.state, editFetcher.data, lastHandledEdit, closeEdit, revalidator]);
+  }, [editFetcher.state, editFetcher.data, lastHandledEdit, closeEdit, onBulkRuleEdited]);
 
   const saving = editFetcher.state === "submitting" || editFetcher.state === "loading";
   /* Spreadsheet-style rows for Bulk-Edit mode. Sort rules first so the
@@ -477,7 +432,7 @@ export default function RulesOverview({
   const bulkRows = useMemo(() => {
     if (!bulkMode) return [];
 
-    let rules = [...displayedBulkRules];
+    let rules = [...bulkRules];
 
     if (filterType !== "ALL") {
       rules = rules.filter((r) => r.logicType === filterType);
@@ -515,7 +470,7 @@ export default function RulesOverview({
     }
 
     return rows;
-  }, [bulkMode, displayedBulkRules, searchQuery, filterType, sortOrder]);
+  }, [bulkMode, bulkRules, searchQuery, filterType, sortOrder]);
 
   const filteredZones = useMemo(() => {
     let result = zones.map((z) => ({

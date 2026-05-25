@@ -510,6 +510,58 @@ export default function ShippingDashboard() {
   // Toast
   const [toastMsg, setToastMsg] = useState(null);
 
+  /* Optimistic patches for inline bulk-rule edits. Lifted to this parent
+     because RulesOverview unmounts on tab switch — keeping the optimistic
+     state here means the edited value survives a quick Set-up-rates /
+     Bulk-edit detour, even if the underlying loader hasn't caught up yet
+     inside the Shopify embedded-app iframe (where revalidation can lag). */
+  const [bulkOptimisticEdits, setBulkOptimisticEdits] = useState({});
+
+  /* Drop an optimistic patch the moment the canonical loader data catches
+     up to it — comparing the three fields the inline editor actually
+     changes (name, currency, rulesJson) is enough to detect parity. */
+  useEffect(() => {
+    setBulkOptimisticEdits((prev) => {
+      const keys = Object.keys(prev);
+      if (keys.length === 0) return prev;
+      let changed = false;
+      const next = { ...prev };
+      for (const k of keys) {
+        const real = bulkRules.find((r) => r.id === k);
+        const ovr = prev[k];
+        if (
+          real &&
+          real.name === ovr.name &&
+          real.currency === ovr.currency &&
+          real.rulesJson === ovr.rulesJson
+        ) {
+          delete next[k];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [bulkRules]);
+
+  /* Merged view passed down to RulesOverview — bulkRules with any pending
+     optimistic patches applied so the table always shows the user's most
+     recent edit, regardless of loader state. */
+  const mergedBulkRules = useMemo(() => {
+    if (Object.keys(bulkOptimisticEdits).length === 0) return bulkRules;
+    return bulkRules.map((r) => {
+      const ovr = bulkOptimisticEdits[r.id];
+      return ovr ? { ...r, ...ovr } : r;
+    });
+  }, [bulkRules, bulkOptimisticEdits]);
+
+  const handleBulkRuleEdited = useCallback(
+    (id, patch) => {
+      setBulkOptimisticEdits((prev) => ({ ...prev, [id]: patch }));
+      revalidator.revalidate();
+    },
+    [revalidator],
+  );
+
   const activeZone = useMemo(
     () => zones.find((z) => z.id === selectedZoneId),
     [zones, selectedZoneId],
@@ -840,7 +892,7 @@ export default function ShippingDashboard() {
               ) : selectedTab === 1 ? (
                 <RulesOverview
                   zones={zones}
-                  bulkRules={bulkRules}
+                  bulkRules={mergedBulkRules}
                   searchQuery={searchQuery}
                   setSearchQuery={setSearchQuery}
                   filterType={filterType}
@@ -852,6 +904,7 @@ export default function ShippingDashboard() {
                     setSelectedTab(0);
                   }}
                   onDeleteRule={handleDeleteRule}
+                  onBulkRuleEdited={handleBulkRuleEdited}
                   disabled={bulkEditEnabled}
                   bulkMode={bulkEditEnabled}
                 />

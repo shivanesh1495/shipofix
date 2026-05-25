@@ -133,6 +133,213 @@ function buildBandRowsFromRule(rule) {
 /* Rebuild a downloadable xlsx from the current set of BulkEditRule rows.
    Used by intent=last and after inline edits — guarantees the file the
    vendor downloads reflects the latest state of every rule. */
+/* Read an ExcelJS cell's textual value, tolerating richText / formula /
+   number / null cells. Used by the surgical-patch path so cell matching
+   doesn't fail on cosmetic differences. */
+function readCellText(cell) {
+  const v = cell?.value;
+  if (v === null || v === undefined) return "";
+  if (typeof v === "object") {
+    if (Array.isArray(v.richText)) return v.richText.map((rt) => rt.text || "").join("");
+    if (typeof v.result !== "undefined") return String(v.result);
+    if (typeof v.text === "string") return v.text;
+    return "";
+  }
+  return String(v);
+}
+
+/* Surgically patch the originally-uploaded xlsx blob so it reflects an
+   inline rule edit — keeps the user's exact file layout (sheets, columns,
+   formatting, comments, extra data) intact and only touches the specific
+   cells that changed. Returns the patched buffer, or null if the patch
+   can't be applied cleanly (caller falls back to a regenerated file). */
+async function patchBlobForRuleEdit({
+  blob,
+  oldName,
+  newName,
+  newCurrency,
+  newRulesJson,
+  logicType,
+}) {
+  if (!blob) return null;
+  let wb;
+  try {
+    wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(blob);
+  } catch {
+    return null;
+  }
+
+  const wsZones =
+    wb.getWorksheet("Bulk Edit") ||
+    wb.getWorksheet("Zones") ||
+    wb.worksheets.find((w) => {
+      const n = (w.name || "").toLowerCase();
+      return n === "bulk edit" || n === "zones";
+    }) ||
+    wb.worksheets[0];
+  if (!wsZones) return null;
+
+  const wsBands =
+    wb.getWorksheet("Rate Bands") ||
+    wb.worksheets.find((w) => (w.name || "").toLowerCase() === "rate bands") ||
+    null;
+
+  const NAME_COL = 1;
+  const COUNTRY_COL = 2;
+  const CURRENCY_COL = 5;
+  const RATE_COL = 6;
+  const BAND_NAME_COL = 1;
+  const BAND_MIN_COL = 2;
+  const BAND_MAX_COL = 3;
+  const BAND_RATE_COL = 4;
+
+  /* Locate every row of the Bulk Edit sheet whose Name cell matches the
+     rule's current (pre-edit) name. The rule's coverage / overrides live
+     across these rows; we'll update the specific cells we own and leave
+     the rest untouched. */
+  const matchingZoneRows = [];
+  wsZones.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+    if (rowNumber === 1) return;
+    if (readCellText(row.getCell(NAME_COL)).trim() === oldName) {
+      matchingZoneRows.push(rowNumber);
+    }
+  });
+  if (matchingZoneRows.length === 0) return null;
+
+  let parsedNewRules;
+  try {
+    parsedNewRules = JSON.parse(newRulesJson);
+  } catch {
+    return null;
+  }
+
+  /* 1. Rename — propagate to Bulk Edit AND Rate Bands so the rule's
+     bands continue to link by Name on re-upload. */
+  if (newName !== oldName) {
+    for (const rn of matchingZoneRows) {
+      wsZones.getCell(rn, NAME_COL).value = newName;
+    }
+    if (wsBands) {
+      wsBands.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+        if (rowNumber === 1) return;
+        if (readCellText(row.getCell(BAND_NAME_COL)).trim() === oldName) {
+          row.getCell(BAND_NAME_COL).value = newName;
+        }
+      });
+    }
+  }
+
+  /* 2. Currency — overwrite every non-blank Currency cell under the rule
+     so a vendor who had USD repeated on multiple rows ends up consistent.
+     If the rule had no Currency cell at all, seed it on the first row. */
+  let touchedCurrency = false;
+  for (const rn of matchingZoneRows) {
+    const cell = wsZones.getCell(rn, CURRENCY_COL);
+    if (readCellText(cell).trim() !== "") {
+      cell.value = newCurrency;
+      touchedCurrency = true;
+    }
+  }
+  if (!touchedCurrency) {
+    wsZones.getCell(matchingZoneRows[0], CURRENCY_COL).value = newCurrency;
+  }
+
+  /* 3. Rate — depends on logic family. Range types (2/3) read rates from
+     Rate Bands sheet; everything else reads the rule's default rate from
+     the Bulk Edit Rate column. */
+  const isRange = logicType === "WEIGHT_RANGE" || logicType === "PRICE_RANGE";
+
+  if (isRange) {
+    if (!wsBands) return null;
+    const targetName = newName;
+    const existingBandRows = [];
+    wsBands.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+      if (rowNumber === 1) return;
+      if (readCellText(row.getCell(BAND_NAME_COL)).trim() === targetName) {
+        existingBandRows.push(rowNumber);
+      }
+    });
+    const newBands = Array.isArray(parsedNewRules) ? parsedNewRules : [];
+    const minKey = logicType === "WEIGHT_RANGE" ? "min_kg" : "min_total";
+    const maxKey = logicType === "WEIGHT_RANGE" ? "max_kg" : "max_total";
+
+    /* Reuse the rule's existing band rows where we can — preserves their
+       row position, formatting and any neighbouring vendor comments. Any
+       extra original rows are blanked out; any extra new bands are
+       appended to the bottom of the sheet. */
+    for (let i = 0; i < existingBandRows.length; i++) {
+      const rn = existingBandRows[i];
+      if (i < newBands.length) {
+        const b = newBands[i];
+        wsBands.getCell(rn, BAND_NAME_COL).value = targetName;
+        wsBands.getCell(rn, BAND_MIN_COL).value = b[minKey] ?? 0;
+        wsBands.getCell(rn, BAND_MAX_COL).value =
+          b[maxKey] !== undefined && b[maxKey] !== null ? b[maxKey] : "";
+        wsBands.getCell(rn, BAND_RATE_COL).value = b.rate;
+      } else {
+        wsBands.getCell(rn, BAND_NAME_COL).value = "";
+        wsBands.getCell(rn, BAND_MIN_COL).value = "";
+        wsBands.getCell(rn, BAND_MAX_COL).value = "";
+        wsBands.getCell(rn, BAND_RATE_COL).value = "";
+      }
+    }
+    for (let i = existingBandRows.length; i < newBands.length; i++) {
+      const b = newBands[i];
+      wsBands.addRow([
+        targetName,
+        b[minKey] ?? 0,
+        b[maxKey] !== undefined && b[maxKey] !== null ? b[maxKey] : "",
+        b.rate,
+      ]);
+    }
+  } else {
+    const rateField =
+      logicType === "STANDARD_TIER"     ? "flat_rate"
+      : logicType === "WEIGHT_MULTIPLIER" ? "rate_per_kg"
+      : logicType === "PRICE_MULTIPLIER"  ? "percentage"
+      : logicType === "ITEM_MULTIPLIER"   ? "rate_per_item"
+      : null;
+    if (!rateField) return null;
+    const newRate = parsedNewRules[rateField];
+    if (newRate === undefined || newRate === null) return null;
+
+    /* Prefer an "unbound" row (Name set, Country blank, Rate non-blank) —
+       that's how the upload parser locates the fallback rate. Otherwise
+       update the first matching row with a non-blank Rate. Last resort:
+       set the rate on the rule's first row. */
+    let updated = false;
+    for (const rn of matchingZoneRows) {
+      const country = readCellText(wsZones.getCell(rn, COUNTRY_COL)).trim();
+      const rate = readCellText(wsZones.getCell(rn, RATE_COL)).trim();
+      if (country === "" && rate !== "") {
+        wsZones.getCell(rn, RATE_COL).value = newRate;
+        updated = true;
+        break;
+      }
+    }
+    if (!updated) {
+      for (const rn of matchingZoneRows) {
+        if (readCellText(wsZones.getCell(rn, RATE_COL)).trim() !== "") {
+          wsZones.getCell(rn, RATE_COL).value = newRate;
+          updated = true;
+          break;
+        }
+      }
+    }
+    if (!updated) {
+      wsZones.getCell(matchingZoneRows[0], RATE_COL).value = newRate;
+    }
+  }
+
+  try {
+    const out = await wb.xlsx.writeBuffer();
+    return Buffer.from(out);
+  } catch {
+    return null;
+  }
+}
+
 async function buildWorkbookFromBulkRules(rules) {
   const sortedRules = [...rules].sort((a, b) => a.name.localeCompare(b.name));
   const zoneDataRows = sortedRules.flatMap((r) => buildZoneRowsFromRule(r));
@@ -422,25 +629,22 @@ export const loader = async ({ request }) => {
   const url = new URL(request.url);
   const intent = url.searchParams.get("intent");
 
-  /* Download a fresh xlsx built from the current set of BulkEditRule rows
-     for this shop. Always regenerated (not the originally-uploaded blob) so
-     inline edits made on the Rules Overview tab are reflected immediately —
-     the downloaded file is the latest source of truth and can be edited and
-     re-uploaded without losing those inline changes. */
+  /* Download the stored xlsx blob exactly as it sits in the DB — which is
+     the file the vendor uploaded, kept in lock-step with inline edits via
+     in-place surgical patches on the edit_rule action below. The user
+     gets back their own file structure (sheets, formatting, vendor
+     comments) with the cells changed inline updated, not a regenerated
+     template. */
   if (intent === "last") {
     const { session } = await authenticate.admin(request);
-    if (!prisma.bulkEditUpload || !prisma.bulkEditRule) {
+    if (!prisma.bulkEditUpload) {
       return new Response("Storage not initialised", { status: 503 });
     }
     const last = await prisma.bulkEditUpload.findUnique({
       where: { shop: session.shop },
     });
     if (!last) return new Response("No previous upload", { status: 404 });
-    const rules = await prisma.bulkEditRule.findMany({
-      where: { shop: session.shop },
-    });
-    const buffer = await buildWorkbookFromBulkRules(rules);
-    return new Response(buffer, {
+    return new Response(last.data, {
       status: 200,
       headers: {
         "Content-Type":
@@ -899,16 +1103,31 @@ export const action = async ({ request }) => {
       },
     });
 
-    /* Rebuild the stored xlsx so a download will reflect this edit. We keep
-       the same filename / metadata row so the UI's "Last uploaded file" card
-       still points at the same artefact. */
-    const allRules = await prisma.bulkEditRule.findMany({
-      where: { shop: shopDomain },
-    });
-    const buf = await buildWorkbookFromBulkRules(allRules);
+    /* Patch the existing uploaded blob in place so the downloaded file
+       still LOOKS like the vendor's file — only the cells that changed are
+       touched. If the rule can't be located in the blob (rule was added
+       after the last upload, blob is corrupted, etc.) we fall back to a
+       freshly-generated workbook so the download is still up to date. */
     const lastRow = await prisma.bulkEditUpload.findUnique({
       where: { shop: shopDomain },
     });
+    let buf = null;
+    if (lastRow?.data) {
+      buf = await patchBlobForRuleEdit({
+        blob: lastRow.data,
+        oldName: existing.name,
+        newName: nextName,
+        newCurrency: nextCurrency,
+        newRulesJson: finalJson,
+        logicType: existing.logicType,
+      });
+    }
+    if (!buf) {
+      const allRules = await prisma.bulkEditRule.findMany({
+        where: { shop: shopDomain },
+      });
+      buf = await buildWorkbookFromBulkRules(allRules);
+    }
     const filename = lastRow?.filename || "shipofix-bulk-edit.xlsx";
     await prisma.bulkEditUpload.upsert({
       where: { shop: shopDomain },

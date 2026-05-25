@@ -32,15 +32,16 @@ const LOGIC_LABELS = Object.fromEntries(
   LOGIC_TYPES.map((t) => [t.value, t.label]),
 );
 
-/* Map server-side logic types to the Logic # vendors see in the Bulk Edit
-   template, so the spreadsheet view here matches the .xlsx column exactly. */
-const LOGIC_NUM = {
-  STANDARD_TIER: 1,
-  WEIGHT_RANGE: 2,
-  PRICE_RANGE: 3,
-  WEIGHT_MULTIPLIER: 4,
-  PRICE_MULTIPLIER: 5,
-  ITEM_MULTIPLIER: 6,
+/* Short, vendor-friendly name for the pricing model column in bulk-mode.
+   Replaces the cryptic Logic # numeric badge so non-technical users can
+   read the table at a glance. */
+const LOGIC_SHORT_NAME = {
+  STANDARD_TIER: "Flat rate",
+  WEIGHT_RANGE: "Weight tiers",
+  PRICE_RANGE: "Order-value tiers",
+  WEIGHT_MULTIPLIER: "Per kilogram",
+  PRICE_MULTIPLIER: "% of cart",
+  ITEM_MULTIPLIER: "Per item",
 };
 
 function fmtCountry(c) {
@@ -73,7 +74,7 @@ function countrySummary(zone) {
    first coverage row for non-range types, or on its own band row(s)
    for range types. */
 function flattenBulkRule(rule) {
-  const logicNum = LOGIC_NUM[rule.logicType] ?? "";
+  const logicName = LOGIC_SHORT_NAME[rule.logicType] ?? rule.logicType ?? "";
   const currency = rule.currency || "";
 
   let parsedRules = {};
@@ -163,7 +164,7 @@ function flattenBulkRule(rule) {
     name: i === 0 ? rule.name : "",
     country: cov.country,
     zone: cov.zone,
-    logic: i === 0 ? logicNum : "",
+    logic: i === 0 ? logicName : "",
     currency: i === 0 ? currency : "",
     min: "",
     max: "",
@@ -335,7 +336,7 @@ export default function RulesOverview({
                     "text",
                     "text",
                     "text",
-                    "numeric",
+                    "text",
                     "text",
                     "numeric",
                     "numeric",
@@ -345,7 +346,7 @@ export default function RulesOverview({
                     "Name",
                     "Country",
                     "Zone",
-                    "Logic #",
+                    "Pricing model",
                     "Currency",
                     "Min",
                     "Max",
@@ -358,7 +359,7 @@ export default function RulesOverview({
                     r.country || "",
                     r.zone || "",
                     r.logic !== "" ? (
-                      <Badge key={`l-${i}`} tone="success">{String(r.logic)}</Badge>
+                      <Badge key={`l-${i}`} tone="info">{String(r.logic)}</Badge>
                     ) : (
                       ""
                     ),

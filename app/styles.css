@@ -1158,3 +1158,653 @@ body {
     grid-template-columns: 1fr !important;
   }
 }
+
+/* ╔═══════════════════════════════════════════════════════════════════════╗
+   ║                                                                       ║
+   ║   SHIPOFIX · PREMIUM UI LAYER (v2)                                    ║
+   ║   ────────────────────────────────                                    ║
+   ║   Refined accent system, ambient background, polished surfaces.       ║
+   ║   Appended last so it overrides earlier rules where needed.           ║
+   ║                                                                       ║
+   ╚═══════════════════════════════════════════════════════════════════════╝ */
+
+:root {
+  /* Accent — refined indigo/violet pulled from the brand mark */
+  --accent-50:  #EEF0FF;
+  --accent-100: #DFE2FF;
+  --accent-200: #C0C7FF;
+  --accent-300: #99A3FF;
+  --accent-400: #7B82F7;
+  --accent-500: #5B5FE3;
+  --accent-600: #4F46E5;
+  --accent-700: #4338CA;
+  --accent-800: #3730A3;
+  --accent-900: #2A2473;
+
+  /* Semantic accent tokens */
+  --ring: 0 0 0 3px color-mix(in srgb, var(--accent-500) 22%, transparent);
+  --ring-soft: 0 0 0 4px color-mix(in srgb, var(--accent-500) 12%, transparent);
+
+  /* Refined elevation system — softer, layered */
+  --elev-1: 0 1px 2px rgba(15, 18, 41, 0.04), 0 1px 1px rgba(15, 18, 41, 0.03);
+  --elev-2: 0 4px 12px -2px rgba(15, 18, 41, 0.07), 0 2px 4px -2px rgba(15, 18, 41, 0.04);
+  --elev-3: 0 12px 28px -8px rgba(15, 18, 41, 0.12), 0 4px 10px -4px rgba(15, 18, 41, 0.05);
+  --elev-4: 0 24px 48px -12px rgba(15, 18, 41, 0.18), 0 8px 16px -8px rgba(15, 18, 41, 0.08);
+
+  /* Crisp surface treatment */
+  --surface-elevated: #FFFFFF;
+  --surface-sunken:   #F7F8FB;
+  --surface-glass:    rgba(255, 255, 255, 0.72);
+  --border-hairline:  rgba(15, 18, 41, 0.06);
+  --border-soft:      rgba(15, 18, 41, 0.09);
+  --border-strong-v2: rgba(15, 18, 41, 0.14);
+
+  /* Type — tightened */
+  --tracking-tight: -0.022em;
+  --tracking-tighter: -0.035em;
+}
+
+/* ── Ambient page background ──────────────────────────────────────────── */
+
+body,
+.Polaris-Frame,
+.Polaris-Frame__Main,
+.Polaris-Page {
+  background:
+    radial-gradient(1200px 600px at 8% -10%,
+      color-mix(in srgb, var(--accent-500) 9%, transparent) 0%,
+      transparent 55%),
+    radial-gradient(900px 500px at 95% 0%,
+      color-mix(in srgb, #FF6BAA 7%, transparent) 0%,
+      transparent 60%),
+    linear-gradient(180deg, #FAFBFE 0%, #F4F6FB 100%) !important;
+}
+
+/* ── Brand title + subtitle refresh ───────────────────────────────────── */
+
+.brand-title {
+  font-size: 1.95rem;
+  font-weight: 800;
+  letter-spacing: var(--tracking-tighter);
+  background: linear-gradient(135deg, #0B0E2A 0%, #1B1F45 55%, var(--accent-700) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  line-height: 1.1;
+}
+
+.brand-subtitle {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--gray-500);
+  letter-spacing: 0;
+}
+
+/* ── Polaris Card — refined surface with subtle accent on focus/hover ── */
+
+.Polaris-Card {
+  border-radius: 18px !important;
+  border: 1px solid var(--border-hairline) !important;
+  box-shadow: var(--elev-1) !important;
+  background: var(--surface-elevated) !important;
+  transition:
+    box-shadow var(--duration-normal) var(--ease-out),
+    border-color var(--duration-normal) var(--ease-out),
+    transform var(--duration-normal) var(--ease-out) !important;
+}
+
+.Polaris-Card:hover {
+  box-shadow: var(--elev-2) !important;
+  border-color: var(--border-soft) !important;
+}
+
+/* ── Tab strip — premium glass pill ───────────────────────────────────── */
+
+.Polaris-Tabs__Wrapper {
+  background: var(--surface-glass) !important;
+  backdrop-filter: saturate(140%) blur(8px);
+  -webkit-backdrop-filter: saturate(140%) blur(8px);
+  border-radius: 14px !important;
+  padding: 5px !important;
+  border: 1px solid var(--border-hairline) !important;
+  box-shadow: var(--elev-1);
+}
+
+.Polaris-Tabs__Tab {
+  border-radius: 10px !important;
+  margin: 0 2px !important;
+  font-weight: 600 !important;
+  font-size: 0.84rem !important;
+  padding: 9px 16px !important;
+  color: var(--gray-600) !important;
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out) !important;
+}
+
+.Polaris-Tabs__Tab:hover {
+  color: var(--gray-900) !important;
+}
+
+.Polaris-Tabs__Tab--selected {
+  background: linear-gradient(180deg, #FFFFFF 0%, #F8F9FE 100%) !important;
+  box-shadow: var(--elev-2), inset 0 0 0 1px var(--border-hairline) !important;
+  color: var(--gray-900) !important;
+}
+
+.Polaris-Tabs__Tab--selected .Polaris-Tabs__Title::after {
+  display: none !important;
+}
+
+/* ── Primary button — refined ink with subtle gloss ──────────────────── */
+
+.Polaris-Button--variantPrimary {
+  background:
+    linear-gradient(180deg,
+      color-mix(in srgb, var(--gray-900) 100%, transparent) 0%,
+      var(--black) 100%) !important;
+  border: 1px solid var(--black) !important;
+  border-radius: 10px !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.005em !important;
+  color: var(--white) !important;
+  box-shadow:
+    var(--elev-1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+  transition:
+    transform var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out) !important;
+}
+
+.Polaris-Button--variantPrimary:hover {
+  background: linear-gradient(180deg, #1A1F36 0%, #0A0E26 100%) !important;
+  box-shadow:
+    var(--elev-3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16) !important;
+  transform: translateY(-1px);
+}
+
+.Polaris-Button--variantPrimary:active {
+  transform: translateY(0) !important;
+  box-shadow: var(--elev-1) !important;
+}
+
+/* Secondary buttons — softer surface */
+
+.Polaris-Button {
+  border-radius: 10px !important;
+  font-weight: 600 !important;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out) !important;
+}
+
+/* ── Input fields — accent focus ring ─────────────────────────────────── */
+
+.Polaris-TextField__Backdrop,
+.Polaris-Select__Backdrop {
+  border-radius: 10px !important;
+  border-color: var(--border-soft) !important;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out) !important;
+}
+
+.Polaris-TextField__Input:focus ~ .Polaris-TextField__Backdrop,
+.Polaris-Select__Content:focus ~ .Polaris-Select__Backdrop,
+.Polaris-TextField--focus .Polaris-TextField__Backdrop {
+  border-color: var(--accent-500) !important;
+  box-shadow: var(--ring) !important;
+}
+
+/* ── Banner — gentler, accented tones ─────────────────────────────────── */
+
+.Polaris-Banner {
+  border-radius: 14px !important;
+  border: 1px solid var(--border-hairline) !important;
+  box-shadow: var(--elev-1) !important;
+}
+
+.Polaris-Banner--statusSuccess,
+.Polaris-Banner--toneSuccess {
+  background: linear-gradient(135deg,
+    color-mix(in srgb, #10B981 6%, white) 0%,
+    color-mix(in srgb, #10B981 2%, white) 100%) !important;
+}
+
+.Polaris-Banner--statusInfo,
+.Polaris-Banner--toneInfo {
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--accent-500) 7%, white) 0%,
+    color-mix(in srgb, var(--accent-500) 2%, white) 100%) !important;
+}
+
+.Polaris-Banner--statusWarning,
+.Polaris-Banner--toneWarning {
+  background: linear-gradient(135deg,
+    color-mix(in srgb, #F59E0B 7%, white) 0%,
+    color-mix(in srgb, #F59E0B 2%, white) 100%) !important;
+}
+
+.Polaris-Banner--statusCritical,
+.Polaris-Banner--toneCritical {
+  background: linear-gradient(135deg,
+    color-mix(in srgb, #EF4444 7%, white) 0%,
+    color-mix(in srgb, #EF4444 2%, white) 100%) !important;
+}
+
+/* ── Zone sidebar — accented active state ─────────────────────────────── */
+
+.zone-item {
+  border-left-width: 3px !important;
+  padding: 14px 22px !important;
+  border-radius: 0 12px 12px 0;
+  margin: 2px 6px 2px 0;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out) !important;
+}
+
+.zone-item:hover {
+  background: color-mix(in srgb, var(--accent-500) 4%, transparent);
+}
+
+.zone-item.active {
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--accent-500) 10%, transparent) 0%,
+    color-mix(in srgb, var(--accent-500) 2%, transparent) 100%);
+  border-left-color: var(--accent-600) !important;
+}
+
+.zone-item.active .zone-name {
+  color: var(--accent-800);
+}
+
+.zone-item .zone-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--gray-100) 0%, var(--gray-50) 100%) !important;
+  color: var(--gray-700) !important;
+  box-shadow: inset 0 0 0 1px var(--border-hairline);
+}
+
+.zone-item.active .zone-icon {
+  background: linear-gradient(135deg, var(--accent-500) 0%, var(--accent-700) 100%) !important;
+  color: var(--white) !important;
+  box-shadow: 0 4px 12px -4px color-mix(in srgb, var(--accent-600) 50%, transparent);
+}
+
+/* Zone badges — softer pill style */
+
+.zone-badge.custom {
+  background: linear-gradient(135deg, var(--gray-900) 0%, #1B1F45 100%) !important;
+  color: var(--white) !important;
+  box-shadow: 0 2px 4px -1px rgba(15, 18, 41, 0.2);
+  padding: 4px 10px !important;
+  font-size: 0.62rem !important;
+  letter-spacing: 0.08em !important;
+}
+
+.zone-badge.default {
+  background: var(--surface-sunken) !important;
+  color: var(--gray-500) !important;
+  border: 1px solid var(--border-hairline) !important;
+  padding: 4px 10px !important;
+  font-size: 0.62rem !important;
+  letter-spacing: 0.08em !important;
+}
+
+.zone-sidebar-header h3 {
+  color: var(--gray-500) !important;
+}
+
+.zone-create-btn {
+  border: 1.5px dashed var(--border-strong-v2) !important;
+  color: var(--gray-500) !important;
+  background: var(--surface-sunken) !important;
+  border-radius: 12px !important;
+  padding: 13px 20px !important;
+}
+
+.zone-create-btn:hover {
+  border-color: var(--accent-500) !important;
+  color: var(--accent-700) !important;
+  background: color-mix(in srgb, var(--accent-500) 5%, white) !important;
+}
+
+/* ── Editor — section dividers and headings ───────────────────────────── */
+
+.editor-title {
+  font-size: 1.15rem !important;
+  letter-spacing: var(--tracking-tight);
+}
+
+.countries-strip {
+  background: var(--surface-sunken) !important;
+  border-color: var(--border-hairline) !important;
+  border-radius: 14px !important;
+  padding: 16px !important;
+}
+
+.country-chip {
+  background: var(--white) !important;
+  border-color: var(--border-soft) !important;
+  border-radius: 999px !important;
+  font-size: 0.74rem !important;
+  font-weight: 600 !important;
+  padding: 5px 12px !important;
+  box-shadow: var(--elev-1) !important;
+  color: var(--gray-700) !important;
+}
+
+.country-chip:hover {
+  border-color: var(--accent-500) !important;
+  color: var(--accent-700) !important;
+  transform: translateY(-1px);
+  box-shadow:
+    var(--elev-2),
+    0 0 0 3px color-mix(in srgb, var(--accent-500) 10%, transparent) !important;
+}
+
+.logic-box {
+  background: linear-gradient(180deg, #FBFCFE 0%, #F5F7FB 100%) !important;
+  border: 1px solid var(--border-hairline) !important;
+  border-radius: 14px !important;
+  padding: 22px !important;
+}
+
+.logic-box:focus-within {
+  border-color: var(--accent-300) !important;
+  box-shadow: var(--ring-soft) !important;
+}
+
+/* ── Empty state — modernised ─────────────────────────────────────────── */
+
+.empty-state {
+  padding: 80px 32px !important;
+}
+
+.empty-state-icon {
+  width: 72px;
+  height: 72px;
+  background: linear-gradient(135deg, var(--accent-50) 0%, var(--white) 100%);
+  color: var(--accent-600);
+  box-shadow:
+    0 0 0 8px color-mix(in srgb, var(--accent-500) 6%, transparent),
+    0 0 0 16px color-mix(in srgb, var(--accent-500) 3%, transparent);
+}
+
+.empty-state h3 {
+  font-size: 1.1rem !important;
+  letter-spacing: var(--tracking-tight);
+}
+
+.empty-state p {
+  max-width: 360px !important;
+  line-height: 1.6 !important;
+  font-size: 0.9rem !important;
+  color: var(--gray-500) !important;
+}
+
+/* ── Toast — premium float ────────────────────────────────────────────── */
+
+.toast-container {
+  box-shadow: var(--elev-4) !important;
+  border-radius: 14px !important;
+}
+
+/* ── Bulk Edit logic numbers ──────────────────────────────────────────── */
+
+.bulk-logic-num {
+  background: linear-gradient(135deg, var(--accent-600) 0%, var(--accent-800) 100%) !important;
+  box-shadow: 0 4px 10px -3px color-mix(in srgb, var(--accent-600) 55%, transparent);
+}
+
+/* ── Docs modal headings — gradient accent ────────────────────────────── */
+
+.shipofix-docs-hero h1 {
+  background: linear-gradient(135deg, #0B0E2A 0%, var(--accent-700) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-size: 1.8rem;
+  letter-spacing: var(--tracking-tighter);
+}
+
+.shipofix-docs-toc {
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--accent-500) 6%, white) 0%,
+    color-mix(in srgb, var(--accent-500) 2%, white) 100%);
+  border: 1px solid color-mix(in srgb, var(--accent-500) 15%, transparent);
+}
+
+.shipofix-docs-toc-links a {
+  border-color: color-mix(in srgb, var(--accent-500) 20%, transparent);
+  background: var(--white);
+  color: var(--accent-800);
+  font-weight: 600;
+}
+
+.shipofix-docs-toc-links a:hover {
+  background: var(--accent-50);
+  border-color: var(--accent-500);
+}
+
+.shipofix-docs-section h2 {
+  letter-spacing: var(--tracking-tight);
+}
+
+.shipofix-docs-model {
+  border-radius: 14px;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.shipofix-docs-model:hover {
+  border-color: var(--accent-300);
+  transform: translateY(-2px);
+  box-shadow: var(--elev-2);
+}
+
+.shipofix-docs-model h3 {
+  color: var(--accent-800);
+}
+
+.shipofix-docs-tip {
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--accent-500) 7%, white) 0%,
+    color-mix(in srgb, var(--accent-500) 2%, white) 100%);
+  border-left-color: var(--accent-600);
+  border-color: color-mix(in srgb, var(--accent-500) 18%, transparent);
+}
+
+/* ── Bulk Edit — sheet cards ──────────────────────────────────────────── */
+
+.bulk-docs-sheet {
+  border-radius: 14px;
+  transition: border-color var(--duration-fast) var(--ease-out),
+              transform var(--duration-fast) var(--ease-out),
+              box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.bulk-docs-sheet:hover {
+  border-color: var(--accent-300);
+  transform: translateY(-2px);
+  box-shadow: var(--elev-2);
+}
+
+.bulk-docs-sheet-tag--edit {
+  background: linear-gradient(135deg, var(--accent-600) 0%, var(--accent-800) 100%) !important;
+  border-color: var(--accent-700) !important;
+}
+
+/* ── Country code badge in docs ───────────────────────────────────────── */
+
+.bulk-codes-country-code {
+  background: linear-gradient(135deg, var(--gray-900) 0%, #1B1F45 100%) !important;
+}
+
+/* ── Inputs inside the price form — emphasised currency prefix ────────── */
+
+.Polaris-TextField__Prefix {
+  font-weight: 700 !important;
+  color: var(--accent-700) !important;
+  letter-spacing: 0.02em;
+}
+
+/* ── Smooth fade for whole page ───────────────────────────────────────── */
+
+.animate-fade-in {
+  animation: shipofixFadeIn 600ms var(--ease-out) both;
+}
+
+@keyframes shipofixFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── Scrollbar — refined ──────────────────────────────────────────────── */
+
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--accent-500) 28%, var(--gray-300)) !important;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-500) !important;
+}
+
+/* ── Divider polish ───────────────────────────────────────────────────── */
+
+.Polaris-Divider {
+  border-top: 1px solid var(--border-hairline) !important;
+}
+
+/* ── Modal — refined chrome ───────────────────────────────────────────── */
+
+.Polaris-Modal-Dialog__Modal {
+  border-radius: 18px !important;
+  box-shadow: var(--elev-4) !important;
+}
+
+/* ── Bulk Edit panel — file drop zone polish ──────────────────────────── */
+
+.Polaris-DropZone {
+  border-radius: 14px !important;
+  border-color: var(--border-strong-v2) !important;
+  background: var(--surface-sunken) !important;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out) !important;
+}
+
+.Polaris-DropZone:hover,
+.Polaris-DropZone--isDragging {
+  border-color: var(--accent-500) !important;
+  background: color-mix(in srgb, var(--accent-500) 5%, white) !important;
+}
+
+/* ── Polaris Badge tone refresh (success / info) ──────────────────────── */
+
+.Polaris-Badge--toneSuccess {
+  background: linear-gradient(135deg, #10B981 0%, #059669 100%) !important;
+  color: white !important;
+  border: none !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.02em;
+}
+
+.Polaris-Badge--toneInfo {
+  background: linear-gradient(135deg, var(--accent-500) 0%, var(--accent-700) 100%) !important;
+  color: white !important;
+  border: none !important;
+  font-weight: 700 !important;
+}
+
+/* ── Tooltip-ish hint pills used across the app ───────────────────────── */
+
+.selection-counter {
+  background: linear-gradient(135deg, var(--accent-50) 0%, white 100%) !important;
+  border: 1px solid color-mix(in srgb, var(--accent-500) 18%, transparent) !important;
+  color: var(--accent-800) !important;
+}
+
+/* ── Page-wide nicer spacing for top of Page ──────────────────────────── */
+
+.Polaris-Page {
+  padding-top: 8px;
+}
+
+/* ── Premium brand strip (top of page) ────────────────────────────────── */
+
+.brand-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 22px;
+  background: var(--surface-glass);
+  backdrop-filter: saturate(160%) blur(12px);
+  -webkit-backdrop-filter: saturate(160%) blur(12px);
+  border: 1px solid var(--border-hairline);
+  border-radius: 18px;
+  box-shadow: var(--elev-1);
+  position: relative;
+  overflow: hidden;
+}
+
+.brand-strip::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(420px 180px at 0% 0%,
+      color-mix(in srgb, var(--accent-500) 12%, transparent) 0%,
+      transparent 70%),
+    radial-gradient(360px 140px at 100% 100%,
+      color-mix(in srgb, #FF6BAA 8%, transparent) 0%,
+      transparent 70%);
+  pointer-events: none;
+  opacity: 0.9;
+}
+
+.brand-strip-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  position: relative;
+  z-index: 1;
+}
+
+.brand-logo-wrap {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--white) 0%, #F1F3FB 100%);
+  border: 1px solid var(--border-hairline);
+  box-shadow:
+    var(--elev-2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.brand-logo {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: block;
+}
+

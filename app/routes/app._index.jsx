@@ -707,20 +707,15 @@ export default function ShippingDashboard() {
       <div className="animate-fade-in">
         <BlockStack gap="500">
           {/* ── Header ── */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              paddingBottom: "4px",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-              <img src="/logo.svg" alt="Shipofix Logo" style={{ width: "48px", height: "48px", borderRadius: "12px", boxShadow: "var(--shadow-sm)" }} />
+          <div className="brand-strip">
+            <div className="brand-strip-left">
+              <div className="brand-logo-wrap">
+                <img src="/logo.svg" alt="Shipofix" className="brand-logo" />
+              </div>
               <div>
                 <div className="brand-title">shipofix</div>
                 <div className="brand-subtitle">
-                  Dynamic shipping rate engine · Zone-based configuration
+                  Set what your customers pay for shipping, country by country.
                 </div>
               </div>
             </div>

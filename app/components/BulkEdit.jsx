@@ -413,9 +413,10 @@ export default function BulkEdit({
                       Last uploaded file
                     </Text>
                     <Text tone="subdued">
-                      Download this to tweak a row, then delete the stored copy and
-                      upload the edited version. Re-uploading replaces every existing
-                      rule.
+                      Download to tweak rows in Excel, then upload the edited
+                      version. The download is rebuilt from your current rules,
+                      so any inline edits you&apos;ve made on the <b>All rates</b>{" "}
+                      tab are included. Re-uploading replaces every existing rule.
                     </Text>
                   </BlockStack>
                   <Box
@@ -470,13 +471,13 @@ export default function BulkEdit({
         <Modal.Section>
           <BlockStack gap="200">
             <Text>
-              You&apos;ll get the original file exactly as you uploaded it
-              {lastUpload?.filename ? ` (${lastUpload.filename})` : ""} — not a
-              freshly generated template.
+              You&apos;ll get a fresh xlsx built from your current rules
+              {lastUpload?.filename ? ` (saved as ${lastUpload.filename})` : ""},
+              including any inline edits you made on the <b>All rates</b> tab.
             </Text>
             <Text tone="subdued" variant="bodySm">
-              Edit it offline, delete the stored copy, then upload the edited
-              version to replace your current rules.
+              Edit it offline, then upload the edited version to replace your
+              current rules.
             </Text>
           </BlockStack>
         </Modal.Section>

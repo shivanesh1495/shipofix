@@ -30,6 +30,177 @@ const LOGIC_BY_NUMBER = {
   6: "ITEM_MULTIPLIER",
 };
 
+const LOGIC_TO_NUMBER = Object.fromEntries(
+  Object.entries(LOGIC_BY_NUMBER).map(([k, v]) => [v, Number(k)]),
+);
+
+/* Flatten one BulkEditRule into spreadsheet rows for the Bulk Edit sheet.
+   Returns [leadingRow, ...coverageRows]. The leading row carries Name,
+   Logic # and Currency (and the default rate for non-range types). Coverage
+   rows just carry Country/Zone — plus an override rate when the rule has an
+   explicit per-destination override that differs from the default. */
+function buildZoneRowsFromRule(rule) {
+  let parsedRules = {};
+  try { parsedRules = JSON.parse(rule.rulesJson || "{}"); } catch { parsedRules = {}; }
+  let parsedCountries = [];
+  try { parsedCountries = JSON.parse(rule.countries || "[]"); } catch { parsedCountries = []; }
+
+  const isRange =
+    rule.logicType === "WEIGHT_RANGE" || rule.logicType === "PRICE_RANGE";
+
+  let defaultRate = null;
+  const overrideByKey = new Map();
+  if (!isRange) {
+    switch (rule.logicType) {
+      case "STANDARD_TIER":     defaultRate = parsedRules.flat_rate; break;
+      case "WEIGHT_MULTIPLIER": defaultRate = parsedRules.rate_per_kg; break;
+      case "PRICE_MULTIPLIER":  defaultRate = parsedRules.percentage; break;
+      case "ITEM_MULTIPLIER":   defaultRate = parsedRules.rate_per_item; break;
+    }
+    if (Array.isArray(parsedRules.overrides)) {
+      for (const o of parsedRules.overrides) {
+        overrideByKey.set(`${o.countryCode}::${o.province || ""}`, o.rate);
+      }
+    }
+  }
+
+  const logicNum = LOGIC_TO_NUMBER[rule.logicType] ?? "";
+  const rows = [];
+  /* Leading row — country/zone left blank so this row acts as the "unbound"
+     default-rate entry on re-upload (buildNonRangeRate looks for a row with
+     no countryCode to seed the fallback rate). */
+  rows.push([
+    rule.name,
+    "",
+    "",
+    logicNum,
+    rule.currency || "USD",
+    isRange ? "" : (defaultRate ?? ""),
+  ]);
+
+  for (const c of parsedCountries) {
+    if (c.restOfWorld) {
+      rows.push(["", "Rest of World", "", "", "", ""]);
+      continue;
+    }
+    const countryLabel = c.countryCode
+      ? `${c.name || c.countryCode} (${c.countryCode})`
+      : (c.name || "");
+    const provs = Array.isArray(c.provinces) ? c.provinces : [];
+    if (provs.length === 0) {
+      let rate = "";
+      if (!isRange) {
+        const ovr = overrideByKey.get(`${c.countryCode}::`);
+        if (ovr !== undefined && Number(ovr) !== Number(defaultRate)) rate = ovr;
+      }
+      rows.push(["", countryLabel, "", "", "", rate]);
+    } else {
+      for (const p of provs) {
+        const provLabel =
+          p.code && p.name ? `${p.name} (${p.code})` : (p.name || p.code || "");
+        let rate = "";
+        if (!isRange) {
+          const ovr = overrideByKey.get(`${c.countryCode}::${p.code}`);
+          if (ovr !== undefined && Number(ovr) !== Number(defaultRate)) rate = ovr;
+        }
+        rows.push(["", countryLabel, provLabel, "", "", rate]);
+      }
+    }
+  }
+
+  return rows;
+}
+
+/* Flatten one BulkEditRule's bands into Rate Bands sheet rows. Only Logic 2 / 3
+   rules contribute; everything else returns []. */
+function buildBandRowsFromRule(rule) {
+  if (rule.logicType !== "WEIGHT_RANGE" && rule.logicType !== "PRICE_RANGE") {
+    return [];
+  }
+  let parsed = [];
+  try { parsed = JSON.parse(rule.rulesJson || "[]"); } catch { parsed = []; }
+  if (!Array.isArray(parsed)) return [];
+  const minKey = rule.logicType === "WEIGHT_RANGE" ? "min_kg" : "min_total";
+  const maxKey = rule.logicType === "WEIGHT_RANGE" ? "max_kg" : "max_total";
+  return parsed.map((b) => [
+    rule.name,
+    b[minKey] ?? "",
+    b[maxKey] ?? "",
+    b.rate ?? "",
+  ]);
+}
+
+/* Rebuild a downloadable xlsx from the current set of BulkEditRule rows.
+   Used by intent=last and after inline edits — guarantees the file the
+   vendor downloads reflects the latest state of every rule. */
+async function buildWorkbookFromBulkRules(rules) {
+  const sortedRules = [...rules].sort((a, b) => a.name.localeCompare(b.name));
+  const zoneDataRows = sortedRules.flatMap((r) => buildZoneRowsFromRule(r));
+  const bandDataRows = sortedRules.flatMap((r) => buildBandRowsFromRule(r));
+
+  const wb = new ExcelJS.Workbook();
+  const headerStyle = {
+    font: { bold: true, color: { argb: "FFFFFFFF" } },
+    fill: { type: "pattern", pattern: "solid", fgColor: { argb: "FF111827" } },
+    alignment: { vertical: "middle", horizontal: "left" },
+  };
+
+  /* Bulk Edit sheet */
+  const wsZones = wb.addWorksheet("Bulk Edit", {
+    views: [{ state: "frozen", ySplit: 1 }],
+  });
+  wsZones.columns = [
+    { width: 24 }, { width: 26 }, { width: 28 },
+    { width: 9 },  { width: 10 }, { width: 14 },
+  ];
+  wsZones.addRow(TEMPLATE_HEADERS);
+  zoneDataRows.forEach((r) => wsZones.addRow(r));
+  for (let i = 0; i < 10; i++) wsZones.addRow(EMPTY_ROW());
+  wsZones.getRow(1).eachCell((c) => {
+    c.font = headerStyle.font;
+    c.fill = headerStyle.fill;
+    c.alignment = headerStyle.alignment;
+  });
+  wsZones.getRow(1).height = 22;
+  /* Same pink-highlight for Rate when Logic # is 2 / 3 — keeps the visual
+     cue consistent with the template the vendor downloaded originally. */
+  const lastZoneRow = wsZones.rowCount;
+  wsZones.addConditionalFormatting({
+    ref: `F2:F${lastZoneRow}`,
+    rules: [
+      {
+        type: "expression",
+        formulae: ["OR($D2=2,$D2=3)"],
+        priority: 1,
+        style: {
+          fill: { type: "pattern", pattern: "solid", bgColor: { argb: "FFFFE5E5" } },
+          font: { color: { argb: "FFB91C1C" } },
+        },
+      },
+    ],
+  });
+
+  /* Rate Bands sheet */
+  const wsBands = wb.addWorksheet("Rate Bands", {
+    views: [{ state: "frozen", ySplit: 1 }],
+  });
+  wsBands.columns = [
+    { width: 26 }, { width: 14 }, { width: 14 }, { width: 14 },
+  ];
+  wsBands.addRow(BANDS_HEADERS);
+  bandDataRows.forEach((r) => wsBands.addRow(r));
+  for (let i = 0; i < 50; i++) wsBands.addRow(["", "", "", ""]);
+  wsBands.getRow(1).eachCell((c) => {
+    c.font = headerStyle.font;
+    c.fill = headerStyle.fill;
+    c.alignment = headerStyle.alignment;
+  });
+  wsBands.getRow(1).height = 22;
+
+  const buffer = await wb.xlsx.writeBuffer();
+  return Buffer.from(buffer);
+}
+
 const LOGIC_LABELS = {
   STANDARD_TIER: "Standard Flat Tier",
   WEIGHT_RANGE: "Weight Based (Category)",
@@ -251,19 +422,25 @@ export const loader = async ({ request }) => {
   const url = new URL(request.url);
   const intent = url.searchParams.get("intent");
 
-  /* Download the most recent file the vendor uploaded for this shop, exactly
-     as it was uploaded. Lets them tweak a row and re-upload without having to
-     regenerate the template from scratch. */
+  /* Download a fresh xlsx built from the current set of BulkEditRule rows
+     for this shop. Always regenerated (not the originally-uploaded blob) so
+     inline edits made on the Rules Overview tab are reflected immediately —
+     the downloaded file is the latest source of truth and can be edited and
+     re-uploaded without losing those inline changes. */
   if (intent === "last") {
     const { session } = await authenticate.admin(request);
-    if (!prisma.bulkEditUpload) {
+    if (!prisma.bulkEditUpload || !prisma.bulkEditRule) {
       return new Response("Storage not initialised", { status: 503 });
     }
     const last = await prisma.bulkEditUpload.findUnique({
       where: { shop: session.shop },
     });
     if (!last) return new Response("No previous upload", { status: 404 });
-    return new Response(last.data, {
+    const rules = await prisma.bulkEditRule.findMany({
+      where: { shop: session.shop },
+    });
+    const buffer = await buildWorkbookFromBulkRules(rules);
+    return new Response(buffer, {
       status: 200,
       headers: {
         "Content-Type":
@@ -602,6 +779,155 @@ export const action = async ({ request }) => {
 
   const formData = await request.formData();
   const intent = String(formData.get("intent") || "").trim();
+
+  /* Inline edit of a single BulkEditRule from the Rules Overview tab.
+     Updates only the safe-to-tweak fields (name, currency, rulesJson) — the
+     rule's coverage (countries/provinces) and logicType are left alone here;
+     structural changes still go through download → edit Excel → re-upload.
+     After the DB update we rebuild the stored xlsx so the "Last uploaded
+     file" download always matches the latest state. */
+  if (intent === "edit_rule") {
+    if (!prisma.bulkEditRule || !prisma.bulkEditUpload) {
+      return {
+        success: false,
+        error:
+          "Bulk Edit storage isn't initialised yet. Run `npx prisma generate` and restart.",
+      };
+    }
+    const id = String(formData.get("id") || "").trim();
+    const nextName = String(formData.get("name") || "").trim();
+    const nextCurrency =
+      String(formData.get("currency") || "USD").trim().toUpperCase() || "USD";
+    const rulesJsonRaw = String(formData.get("rulesJson") || "").trim();
+
+    if (!id) return { success: false, error: "Missing rule id." };
+    if (!nextName) return { success: false, error: "Name can't be empty." };
+
+    let parsedRules;
+    try {
+      parsedRules = JSON.parse(rulesJsonRaw || "{}");
+    } catch {
+      return { success: false, error: "Couldn't read the rule values you entered." };
+    }
+
+    const existing = await prisma.bulkEditRule.findFirst({
+      where: { id, shop: shopDomain },
+    });
+    if (!existing) return { success: false, error: "Rule not found for this shop." };
+
+    /* Shape validation per logic type. We only allow the user to change the
+       fields the inline editor exposes — defaultRate (non-range) or bands
+       (range). Per-destination overrides are preserved from the existing
+       rulesJson so an inline edit doesn't silently drop them. */
+    const isRange =
+      existing.logicType === "WEIGHT_RANGE" || existing.logicType === "PRICE_RANGE";
+
+    const num = (v) => {
+      if (v === "" || v === null || v === undefined) return null;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : null;
+    };
+
+    let finalJson;
+    if (isRange) {
+      const incoming = Array.isArray(parsedRules) ? parsedRules : [];
+      if (incoming.length === 0) {
+        return { success: false, error: "At least one band is required." };
+      }
+      const minKey = existing.logicType === "WEIGHT_RANGE" ? "min_kg" : "min_total";
+      const maxKey = existing.logicType === "WEIGHT_RANGE" ? "max_kg" : "max_total";
+      const bands = [];
+      for (let i = 0; i < incoming.length; i++) {
+        const b = incoming[i] || {};
+        const min = num(b[minKey] ?? b.min);
+        const max = num(b[maxKey] ?? b.max);
+        const rate = num(b.rate);
+        if (rate === null || rate < 0) {
+          return { success: false, error: `Band ${i + 1}: rate must be a non-negative number.` };
+        }
+        if (min !== null && min < 0) {
+          return { success: false, error: `Band ${i + 1}: min can't be negative.` };
+        }
+        if (max !== null && max < 0) {
+          return { success: false, error: `Band ${i + 1}: max can't be negative.` };
+        }
+        if (min !== null && max !== null && min >= max) {
+          return {
+            success: false,
+            error: `Band ${i + 1}: min (${min}) must be less than max (${max}).`,
+          };
+        }
+        const entry = { [minKey]: min ?? 0, rate };
+        if (max !== null) entry[maxKey] = max;
+        bands.push(entry);
+      }
+      finalJson = JSON.stringify(bands);
+    } else {
+      const incoming =
+        parsedRules && typeof parsedRules === "object" && !Array.isArray(parsedRules)
+          ? parsedRules
+          : {};
+      const rateField =
+        existing.logicType === "STANDARD_TIER"     ? "flat_rate"
+        : existing.logicType === "WEIGHT_MULTIPLIER" ? "rate_per_kg"
+        : existing.logicType === "PRICE_MULTIPLIER"  ? "percentage"
+        : existing.logicType === "ITEM_MULTIPLIER"   ? "rate_per_item"
+        : null;
+      if (!rateField) {
+        return { success: false, error: `Unsupported logic type: ${existing.logicType}` };
+      }
+      const rate = num(incoming[rateField]);
+      if (rate === null || rate < 0) {
+        return { success: false, error: "Rate must be a non-negative number." };
+      }
+      /* Preserve existing per-destination overrides verbatim. */
+      let prior = {};
+      try { prior = JSON.parse(existing.rulesJson || "{}"); } catch { prior = {}; }
+      const payload = { [rateField]: rate };
+      if (Array.isArray(prior.overrides) && prior.overrides.length > 0) {
+        payload.overrides = prior.overrides;
+      }
+      finalJson = JSON.stringify(payload);
+    }
+
+    await prisma.bulkEditRule.update({
+      where: { id },
+      data: {
+        name: nextName,
+        currency: nextCurrency,
+        rulesJson: finalJson,
+      },
+    });
+
+    /* Rebuild the stored xlsx so a download will reflect this edit. We keep
+       the same filename / metadata row so the UI's "Last uploaded file" card
+       still points at the same artefact. */
+    const allRules = await prisma.bulkEditRule.findMany({
+      where: { shop: shopDomain },
+    });
+    const buf = await buildWorkbookFromBulkRules(allRules);
+    const lastRow = await prisma.bulkEditUpload.findUnique({
+      where: { shop: shopDomain },
+    });
+    const filename = lastRow?.filename || "shipofix-bulk-edit.xlsx";
+    await prisma.bulkEditUpload.upsert({
+      where: { shop: shopDomain },
+      update: {
+        filename,
+        size: buf.length,
+        data: buf,
+        uploadedAt: new Date(),
+      },
+      create: {
+        shop: shopDomain,
+        filename,
+        size: buf.length,
+        data: buf,
+      },
+    });
+
+    return { success: true, message: `Rule "${nextName}" updated.` };
+  }
 
   /* Drop the stored last-upload file (vendor-initiated cleanup). Doesn't touch
      any zone rules — only the cached file. */

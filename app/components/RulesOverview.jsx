@@ -12,12 +12,14 @@ import {
   DataTable,
   Icon,
   InlineStack,
+  Modal,
   Select,
   Text,
   TextField,
 } from "@shopify/polaris";
-import { SearchIcon } from "@shopify/polaris-icons";
-import { useMemo } from "react";
+import { DeleteIcon, PlusIcon, SearchIcon } from "@shopify/polaris-icons";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useFetcher, useRevalidator } from "react-router";
 
 const LOGIC_TYPES = [
   { label: "Standard Flat Tier", value: "STANDARD_TIER" },
@@ -161,6 +163,9 @@ function flattenBulkRule(rule) {
     rule.logicType === "WEIGHT_RANGE" || rule.logicType === "PRICE_RANGE";
 
   const rows = coverageRows.map((cov, i) => ({
+    /* ruleId tagged on the leading row only so the Edit button can identify
+       the rule without us having to keep a parallel index. */
+    ruleId: i === 0 ? rule.id : null,
     name: i === 0 ? rule.name : "",
     country: cov.country,
     zone: cov.zone,
@@ -178,6 +183,7 @@ function flattenBulkRule(rule) {
     const maxKey = rule.logicType === "WEIGHT_RANGE" ? "max_kg" : "max_total";
     for (const b of bands) {
       rows.push({
+        ruleId: null,
         name: "",
         country: "",
         zone: "",
@@ -191,6 +197,54 @@ function flattenBulkRule(rule) {
   }
 
   return rows;
+}
+
+/* Pull the editable rate / bands out of a BulkEditRule into the shape the
+   inline edit modal works with. Non-range rules get a single `rate` field;
+   range rules get an array of {min, max, rate} bands. */
+function ruleToEditState(rule) {
+  let parsed = {};
+  try { parsed = JSON.parse(rule.rulesJson || "{}"); } catch { parsed = {}; }
+  const isRange =
+    rule.logicType === "WEIGHT_RANGE" || rule.logicType === "PRICE_RANGE";
+  if (isRange) {
+    const arr = Array.isArray(parsed) ? parsed : [];
+    const minKey = rule.logicType === "WEIGHT_RANGE" ? "min_kg" : "min_total";
+    const maxKey = rule.logicType === "WEIGHT_RANGE" ? "max_kg" : "max_total";
+    const bands = arr.map((b) => ({
+      min: b?.[minKey] != null ? String(b[minKey]) : "",
+      max: b?.[maxKey] != null ? String(b[maxKey]) : "",
+      rate: b?.rate != null ? String(b.rate) : "",
+    }));
+    return { isRange: true, bands: bands.length ? bands : [{ min: "", max: "", rate: "" }] };
+  }
+  const rateField =
+    rule.logicType === "STANDARD_TIER"     ? "flat_rate"
+    : rule.logicType === "WEIGHT_MULTIPLIER" ? "rate_per_kg"
+    : rule.logicType === "PRICE_MULTIPLIER"  ? "percentage"
+    : rule.logicType === "ITEM_MULTIPLIER"   ? "rate_per_item"
+    : null;
+  const rate = rateField && parsed && typeof parsed === "object" && !Array.isArray(parsed)
+    ? parsed[rateField]
+    : null;
+  return { isRange: false, rate: rate != null ? String(rate) : "" };
+}
+
+/* Short label used as the rate field's label in the edit modal. */
+function rateLabelFor(logicType) {
+  switch (logicType) {
+    case "STANDARD_TIER":     return "Flat rate";
+    case "WEIGHT_MULTIPLIER": return "Rate per kg";
+    case "PRICE_MULTIPLIER":  return "Decimal fraction (0.1 = 10%)";
+    case "ITEM_MULTIPLIER":   return "Rate per item";
+    default:                   return "Rate";
+  }
+}
+
+function rateUnitFor(logicType) {
+  if (logicType === "WEIGHT_RANGE") return "kg";
+  if (logicType === "PRICE_RANGE") return "cart total";
+  return "";
 }
 
 export default function RulesOverview({
@@ -207,6 +261,140 @@ export default function RulesOverview({
   disabled = false,
   bulkMode = false,
 }) {
+  /* ── Inline edit modal state ─────────────────────────────────────────── */
+  const editFetcher = useFetcher();
+  const revalidator = useRevalidator();
+  const [editingRuleId, setEditingRuleId] = useState(null);
+  const [editName, setEditName] = useState("");
+  const [editCurrency, setEditCurrency] = useState("USD");
+  const [editRate, setEditRate] = useState("");
+  const [editBands, setEditBands] = useState([{ min: "", max: "", rate: "" }]);
+  const [editError, setEditError] = useState(null);
+
+  const editingRule = useMemo(
+    () => bulkRules.find((r) => r.id === editingRuleId) || null,
+    [bulkRules, editingRuleId],
+  );
+  const editingIsRange =
+    editingRule &&
+    (editingRule.logicType === "WEIGHT_RANGE" ||
+      editingRule.logicType === "PRICE_RANGE");
+
+  const openEdit = useCallback((ruleId) => {
+    const rule = bulkRules.find((r) => r.id === ruleId);
+    if (!rule) return;
+    const state = ruleToEditState(rule);
+    setEditingRuleId(ruleId);
+    setEditName(rule.name || "");
+    setEditCurrency(rule.currency || "USD");
+    setEditError(null);
+    if (state.isRange) {
+      setEditBands(state.bands);
+      setEditRate("");
+    } else {
+      setEditRate(state.rate);
+      setEditBands([{ min: "", max: "", rate: "" }]);
+    }
+  }, [bulkRules]);
+
+  const closeEdit = useCallback(() => {
+    setEditingRuleId(null);
+    setEditError(null);
+  }, []);
+
+  const updateBand = useCallback((idx, key, value) => {
+    setEditBands((prev) => prev.map((b, i) => (i === idx ? { ...b, [key]: value } : b)));
+  }, []);
+  const addBand = useCallback(() => {
+    setEditBands((prev) => [...prev, { min: "", max: "", rate: "" }]);
+  }, []);
+  const removeBand = useCallback((idx) => {
+    setEditBands((prev) => prev.length <= 1 ? prev : prev.filter((_, i) => i !== idx));
+  }, []);
+
+  const handleSaveEdit = useCallback(() => {
+    if (!editingRule) return;
+    setEditError(null);
+
+    const trimmedName = editName.trim();
+    if (!trimmedName) { setEditError("Name can't be empty."); return; }
+    const cur = (editCurrency || "USD").trim().toUpperCase();
+
+    let rulesPayload;
+    if (editingIsRange) {
+      if (editBands.length === 0) {
+        setEditError("Add at least one band."); return;
+      }
+      const minKey = editingRule.logicType === "WEIGHT_RANGE" ? "min_kg" : "min_total";
+      const maxKey = editingRule.logicType === "WEIGHT_RANGE" ? "max_kg" : "max_total";
+      const out = [];
+      for (let i = 0; i < editBands.length; i++) {
+        const b = editBands[i];
+        const minRaw = String(b.min ?? "").trim();
+        const maxRaw = String(b.max ?? "").trim();
+        const rateRaw = String(b.rate ?? "").trim();
+        if (rateRaw === "") { setEditError(`Band ${i + 1}: rate is required.`); return; }
+        const minN = minRaw === "" ? null : Number(minRaw);
+        const maxN = maxRaw === "" ? null : Number(maxRaw);
+        const rateN = Number(rateRaw);
+        if (!Number.isFinite(rateN) || rateN < 0) {
+          setEditError(`Band ${i + 1}: rate must be a non-negative number.`); return;
+        }
+        if (minRaw !== "" && (!Number.isFinite(minN) || minN < 0)) {
+          setEditError(`Band ${i + 1}: min must be a non-negative number.`); return;
+        }
+        if (maxRaw !== "" && (!Number.isFinite(maxN) || maxN < 0)) {
+          setEditError(`Band ${i + 1}: max must be a non-negative number.`); return;
+        }
+        if (minN !== null && maxN !== null && minN >= maxN) {
+          setEditError(`Band ${i + 1}: min must be less than max.`); return;
+        }
+        const entry = { [minKey]: minN ?? 0, rate: rateN };
+        if (maxN !== null) entry[maxKey] = maxN;
+        out.push(entry);
+      }
+      rulesPayload = JSON.stringify(out);
+    } else {
+      const rateRaw = String(editRate ?? "").trim();
+      if (rateRaw === "") { setEditError("Rate is required."); return; }
+      const rateN = Number(rateRaw);
+      if (!Number.isFinite(rateN) || rateN < 0) {
+        setEditError("Rate must be a non-negative number."); return;
+      }
+      const rateField =
+        editingRule.logicType === "STANDARD_TIER"     ? "flat_rate"
+        : editingRule.logicType === "WEIGHT_MULTIPLIER" ? "rate_per_kg"
+        : editingRule.logicType === "PRICE_MULTIPLIER"  ? "percentage"
+        : editingRule.logicType === "ITEM_MULTIPLIER"   ? "rate_per_item"
+        : null;
+      if (!rateField) {
+        setEditError("Unsupported pricing model for inline edit."); return;
+      }
+      rulesPayload = JSON.stringify({ [rateField]: rateN });
+    }
+
+    const body = new FormData();
+    body.set("intent", "edit_rule");
+    body.set("id", editingRule.id);
+    body.set("name", trimmedName);
+    body.set("currency", cur);
+    body.set("rulesJson", rulesPayload);
+    editFetcher.submit(body, { method: "POST", action: "/app/bulk-edit" });
+  }, [editingRule, editingIsRange, editName, editCurrency, editRate, editBands, editFetcher]);
+
+  /* Close + revalidate on a successful save; surface the server error on
+     failure so the user sees what to fix. */
+  useEffect(() => {
+    if (editFetcher.state !== "idle" || !editFetcher.data) return;
+    if (editFetcher.data.success) {
+      closeEdit();
+      revalidator.revalidate();
+    } else if (editFetcher.data.error) {
+      setEditError(editFetcher.data.error);
+    }
+  }, [editFetcher.state, editFetcher.data, closeEdit, revalidator]);
+
+  const saving = editFetcher.state === "submitting" || editFetcher.state === "loading";
   /* Spreadsheet-style rows for Bulk-Edit mode. Sort rules first so the
      leading row of each rule stays together with its coverage rows. */
   const bulkRows = useMemo(() => {
@@ -353,9 +541,23 @@ export default function RulesOverview({
                     "Rate",
                   ]}
                   rows={bulkRows.map((r, i) => [
-                    <Text key={`n-${i}`} fontWeight={r.name ? "semibold" : "regular"}>
-                      {r.name}
-                    </Text>,
+                    r.ruleId ? (
+                      <InlineStack key={`n-${i}`} gap="200" blockAlign="center" wrap={false}>
+                        <Text fontWeight="semibold">{r.name}</Text>
+                        <Button
+                          size="micro"
+                          variant="tertiary"
+                          onClick={() => openEdit(r.ruleId)}
+                          disabled={saving}
+                        >
+                          Edit
+                        </Button>
+                      </InlineStack>
+                    ) : (
+                      <Text key={`n-${i}`} fontWeight={r.name ? "semibold" : "regular"}>
+                        {r.name}
+                      </Text>
+                    ),
                     r.country || "",
                     r.zone || "",
                     r.logic !== "" ? (
@@ -446,6 +648,140 @@ export default function RulesOverview({
           </BlockStack>
         </Card>
       </BlockStack>
+
+      {/* ── Inline edit modal ─────────────────────────────────────────────
+          Lets the vendor tweak the rate / bands / currency / name of one
+          bulk rule without leaving the Rules Overview tab. Coverage and
+          logic type are read-only here — structural changes still go via
+          download → edit in Excel → re-upload. */}
+      <Modal
+        open={!!editingRule}
+        onClose={closeEdit}
+        title={editingRule ? `Edit "${editingRule.name}"` : "Edit rule"}
+        primaryAction={{
+          content: "Save",
+          onAction: handleSaveEdit,
+          loading: saving,
+          disabled: saving,
+        }}
+        secondaryActions={[{ content: "Cancel", onAction: closeEdit, disabled: saving }]}
+      >
+        {editingRule && (
+          <Modal.Section>
+            <BlockStack gap="400">
+              {editError && (
+                <Box
+                  background="bg-surface-critical-subdued"
+                  padding="300"
+                  borderRadius="200"
+                >
+                  <Text tone="critical">{editError}</Text>
+                </Box>
+              )}
+
+              <Text tone="subdued" variant="bodySm">
+                Pricing model:{" "}
+                <b>
+                  {LOGIC_SHORT_NAME[editingRule.logicType] || editingRule.logicType}
+                </b>
+                . To change the pricing model or which countries this rule
+                covers, download the spreadsheet from the Bulk edit tab.
+              </Text>
+
+              <TextField
+                label="Name"
+                value={editName}
+                onChange={setEditName}
+                autoComplete="off"
+              />
+
+              <TextField
+                label="Currency"
+                value={editCurrency}
+                onChange={(v) => setEditCurrency(v.toUpperCase())}
+                autoComplete="off"
+                maxLength={3}
+                helpText="ISO 3-letter code (e.g. USD, EUR, GBP)."
+              />
+
+              {editingIsRange ? (
+                <BlockStack gap="300">
+                  <Text variant="headingSm" as="h3">
+                    Bands ({rateUnitFor(editingRule.logicType)})
+                  </Text>
+                  <Text tone="subdued" variant="bodySm">
+                    Leave <b>Max</b> blank on the top band for an open-ended
+                    range. Bands shouldn&apos;t overlap.
+                  </Text>
+                  {editBands.map((b, idx) => (
+                    <InlineStack key={idx} gap="200" blockAlign="end" wrap={false}>
+                      <Box minWidth="100px">
+                        <TextField
+                          label={idx === 0 ? "Min" : ""}
+                          labelHidden={idx !== 0}
+                          value={b.min}
+                          onChange={(v) => updateBand(idx, "min", v)}
+                          type="number"
+                          min="0"
+                          autoComplete="off"
+                        />
+                      </Box>
+                      <Box minWidth="100px">
+                        <TextField
+                          label={idx === 0 ? "Max" : ""}
+                          labelHidden={idx !== 0}
+                          value={b.max}
+                          onChange={(v) => updateBand(idx, "max", v)}
+                          type="number"
+                          min="0"
+                          placeholder="∞"
+                          autoComplete="off"
+                        />
+                      </Box>
+                      <Box minWidth="100px">
+                        <TextField
+                          label={idx === 0 ? "Rate" : ""}
+                          labelHidden={idx !== 0}
+                          value={b.rate}
+                          onChange={(v) => updateBand(idx, "rate", v)}
+                          type="number"
+                          min="0"
+                          autoComplete="off"
+                        />
+                      </Box>
+                      <Button
+                        icon={DeleteIcon}
+                        accessibilityLabel={`Remove band ${idx + 1}`}
+                        onClick={() => removeBand(idx)}
+                        disabled={editBands.length <= 1 || saving}
+                      />
+                    </InlineStack>
+                  ))}
+                  <InlineStack align="start">
+                    <Button icon={PlusIcon} onClick={addBand} disabled={saving}>
+                      Add band
+                    </Button>
+                  </InlineStack>
+                </BlockStack>
+              ) : (
+                <TextField
+                  label={rateLabelFor(editingRule.logicType)}
+                  value={editRate}
+                  onChange={setEditRate}
+                  type="number"
+                  min="0"
+                  autoComplete="off"
+                  helpText={
+                    editingRule.logicType === "PRICE_MULTIPLIER"
+                      ? "Type the percent as a decimal — 0.1 means 10%."
+                      : `Charged in ${editCurrency || "USD"}.`
+                  }
+                />
+              )}
+            </BlockStack>
+          </Modal.Section>
+        )}
+      </Modal>
     </Box>
   );
 }

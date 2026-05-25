@@ -875,6 +875,97 @@ body {
   }
 }
 
+/* TOC at the top of the docs modal */
+.bulk-docs-toc {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  background: var(--surface-secondary);
+  border-radius: var(--radius-md);
+}
+
+.bulk-docs-toc-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.bulk-docs-toc-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+}
+
+.bulk-docs-toc-link {
+  font-size: 0.82rem;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: var(--radius-full);
+  color: var(--text-primary);
+  text-decoration: none;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.bulk-docs-toc-link:hover {
+  background: var(--gray-100);
+  border-color: var(--text-primary);
+}
+
+/* Sheet-card edit / reference tags */
+.bulk-docs-sheet-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.bulk-docs-sheet-tag {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: var(--radius-xs);
+  background: var(--gray-100);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+
+.bulk-docs-sheet-tag--edit {
+  background: var(--black);
+  color: var(--white);
+  border-color: var(--black);
+}
+
+/* Column-reference and Logic # tables — let long copy wrap */
+.bulk-docs-table--cols th,
+.bulk-docs-table--cols td,
+.bulk-docs-table--logic th,
+.bulk-docs-table--logic td {
+  white-space: normal;
+  vertical-align: top;
+  line-height: 1.5;
+}
+
+.bulk-docs-table--cols td:first-child,
+.bulk-docs-table--logic td:nth-child(2) {
+  white-space: nowrap;
+}
+
+.bulk-docs-table--logic td:first-child {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.bulk-docs-example {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.78rem;
+  color: var(--text-primary);
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
    RESPONSIVE
    ═══════════════════════════════════════════════════════════════════════ */

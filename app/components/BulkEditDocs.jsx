@@ -23,12 +23,120 @@ import { SearchIcon } from "@shopify/polaris-icons";
 import ALL_COUNTRIES from "../lib/locations.json";
 
 const LOGIC_REFERENCE = [
-  { num: 1, label: "Standard Flat Tier", hint: "Fill Rate column on Bulk Edit. One row per zone." },
-  { num: 2, label: "Weight Based (Category)", hint: "Use the Rate Bands sheet — one row per slab." },
-  { num: 3, label: "Price Based (Category)", hint: "Use the Rate Bands sheet — Min/Max on cart total." },
-  { num: 4, label: "Per KG Dynamic", hint: "Fill Rate column with rate per kg." },
-  { num: 5, label: "Per Price Dynamic", hint: "Fill Rate column with decimal % (0.1 = 10%)." },
-  { num: 6, label: "Per Item Dynamic", hint: "Fill Rate column with rate per item." },
+  {
+    num: 1,
+    label: "Standard Flat Tier",
+    rateSource: "Bulk Edit · Rate",
+    unit: "Flat amount",
+    example: "Rate = 99 → every order pays 99",
+    use: "Single flat charge per zone, regardless of cart contents.",
+  },
+  {
+    num: 2,
+    label: "Weight Based (Category)",
+    rateSource: "Rate Bands sheet",
+    unit: "Bands by total weight (kg)",
+    example: "0–5 kg → 50, 5–10 kg → 80, 10+ kg → 120",
+    use: "Tiered pricing by parcel weight. Carrier picks the band the order falls into.",
+  },
+  {
+    num: 3,
+    label: "Price Based (Category)",
+    rateSource: "Rate Bands sheet",
+    unit: "Bands by cart subtotal",
+    example: "0–999 → 99, 1000–4999 → 49, 5000+ → 0 (free)",
+    use: "Tiered pricing by cart value — common for free-shipping thresholds.",
+  },
+  {
+    num: 4,
+    label: "Per KG Dynamic",
+    rateSource: "Bulk Edit · Rate",
+    unit: "Currency per kg",
+    example: "Rate = 20 · 3.5 kg cart → 70",
+    use: "Charge proportional to total parcel weight.",
+  },
+  {
+    num: 5,
+    label: "Per Price Dynamic",
+    rateSource: "Bulk Edit · Rate",
+    unit: "Decimal fraction of subtotal",
+    example: "Rate = 0.1 · 800 cart → 80 (10%)",
+    use: "Charge a fixed percentage of the cart subtotal.",
+  },
+  {
+    num: 6,
+    label: "Per Item Dynamic",
+    rateSource: "Bulk Edit · Rate",
+    unit: "Currency per item",
+    example: "Rate = 15 · 4 items → 60",
+    use: "Charge proportional to item count.",
+  },
+];
+
+const BULK_EDIT_COLUMNS = [
+  {
+    col: "Name",
+    required: "Always",
+    body: "Free-form rule name. Rows sharing the same Name merge into one rule — coverage is the union of those rows.",
+  },
+  {
+    col: "Country",
+    required: "Always",
+    body: "Pick from the dropdown (ISO code shown in parentheses). Use Rest of World to catch everything your other rules miss.",
+  },
+  {
+    col: "Zone",
+    required: "Always",
+    body: "State / province for the chosen country, or the country-wide entry. Dropdown is pre-filtered.",
+  },
+  {
+    col: "Logic #",
+    required: "First row of each rule",
+    body: "1–6 picks the pricing model. 0 resets the rule to Shopify Default. Blank leaves the existing rule untouched.",
+  },
+  {
+    col: "Currency",
+    required: "First row of each rule",
+    body: "ISO 4217 code (INR, USD, AUD, …). Defaults to INR if blank.",
+  },
+  {
+    col: "Rate",
+    required: "Logic 1, 4, 5, 6",
+    body: "Numeric rate in the chosen currency. Leave blank for Logic 2 / 3 — those rules read from Rate Bands.",
+  },
+];
+
+const RATE_BANDS_COLUMNS = [
+  {
+    col: "Name",
+    required: "Always",
+    body: "Must match a rule Name on the Bulk Edit sheet exactly (case-sensitive).",
+  },
+  {
+    col: "Min",
+    required: "Always",
+    body: "Lower bound (inclusive). Blank is treated as 0.",
+  },
+  {
+    col: "Max",
+    required: "Optional",
+    body: "Upper bound. Blank on the top band = open-ended (∞).",
+  },
+  {
+    col: "Rate",
+    required: "Always",
+    body: "Flat amount charged when an order falls in this band. Blank rows are dropped.",
+  },
+];
+
+const TOC_SECTIONS = [
+  { id: "structure", label: "Workbook structure" },
+  { id: "steps", label: "Filling the template" },
+  { id: "columns", label: "Column reference" },
+  { id: "logic", label: "Logic # reference" },
+  { id: "example", label: "Worked example" },
+  { id: "edges", label: "Edge cases & rules" },
+  { id: "codes", label: "Country & zone codes" },
 ];
 
 const SORTED_COUNTRIES = [...ALL_COUNTRIES].sort((a, b) =>
@@ -89,8 +197,21 @@ export default function BulkEditDocs({ open, onClose }) {
     >
       <Modal.Section>
         <BlockStack gap="500">
+          {/* ── Quick jump TOC ── */}
+          <div className="bulk-docs-toc">
+            <div className="bulk-docs-toc-label">On this page</div>
+            <div className="bulk-docs-toc-links">
+              {TOC_SECTIONS.map((s) => (
+                <a key={s.id} href={`#bulk-docs-${s.id}`} className="bulk-docs-toc-link">
+                  {s.label}
+                </a>
+              ))}
+            </div>
+          </div>
+
           {/* ── How the workbook is structured ── */}
           <BlockStack gap="200">
+            <div id="bulk-docs-structure" />
             <Text variant="headingMd" as="h3">
               Workbook structure
             </Text>
@@ -99,7 +220,10 @@ export default function BulkEditDocs({ open, onClose }) {
             </Text>
             <div className="bulk-docs-sheet-grid">
               <div className="bulk-docs-sheet">
-                <div className="bulk-docs-sheet-title">Bulk Edit</div>
+                <div className="bulk-docs-sheet-title">
+                  Bulk Edit
+                  <span className="bulk-docs-sheet-tag bulk-docs-sheet-tag--edit">Edit</span>
+                </div>
                 <div className="bulk-docs-sheet-body">
                   Coverage + logic. Type a rule <b>Name</b> on every Country /
                   Zone row the rule applies to. Set <b>Logic #</b> and{" "}
@@ -107,22 +231,31 @@ export default function BulkEditDocs({ open, onClose }) {
                 </div>
               </div>
               <div className="bulk-docs-sheet">
-                <div className="bulk-docs-sheet-title">Rate Bands</div>
+                <div className="bulk-docs-sheet-title">
+                  Rate Bands
+                  <span className="bulk-docs-sheet-tag bulk-docs-sheet-tag--edit">Edit (Logic 2 &amp; 3)</span>
+                </div>
                 <div className="bulk-docs-sheet-body">
-                  Slabs for category logic (Logic 2 & 3). One row per band, all
-                  sharing the same rule <b>Name</b>. Leave <b>Max</b> blank on
-                  the top band for an open-ended range.
+                  Slabs for category logic. One row per band, all sharing the
+                  same rule <b>Name</b>. Leave <b>Max</b> blank on the top
+                  band for an open-ended range.
                 </div>
               </div>
               <div className="bulk-docs-sheet">
-                <div className="bulk-docs-sheet-title">All Regions</div>
+                <div className="bulk-docs-sheet-title">
+                  All Regions
+                  <span className="bulk-docs-sheet-tag">Reference</span>
+                </div>
                 <div className="bulk-docs-sheet-body">
                   Read-only reference of every country and its states /
                   provinces. Same list powers the dropdowns on Bulk Edit.
                 </div>
               </div>
               <div className="bulk-docs-sheet">
-                <div className="bulk-docs-sheet-title">Instructions</div>
+                <div className="bulk-docs-sheet-title">
+                  Instructions
+                  <span className="bulk-docs-sheet-tag">Reference</span>
+                </div>
                 <div className="bulk-docs-sheet-body">
                   Quick-reference copy of this guide, including worked
                   examples for each logic type.
@@ -135,6 +268,7 @@ export default function BulkEditDocs({ open, onClose }) {
 
           {/* ── Step-by-step ── */}
           <BlockStack gap="200">
+            <div id="bulk-docs-steps" />
             <Text variant="headingMd" as="h3">
               Filling the template
             </Text>
@@ -147,7 +281,7 @@ export default function BulkEditDocs({ open, onClose }) {
               </li>
               <li>
                 <b>Pick a Logic #.</b> On the <i>first</i> row of each rule, set
-                Logic # (1-6). Use 0 to reset that rule to Shopify Default,
+                Logic # (1–6). Use 0 to reset that rule to Shopify Default,
                 blank to leave the existing rule alone.
               </li>
               <li>
@@ -160,7 +294,7 @@ export default function BulkEditDocs({ open, onClose }) {
                   <li>
                     Logic <b>1, 4, 5, 6</b> — put the value in the Rate column
                     on the Bulk Edit sheet. Leave the Rate column blank for
-                    Logic 2 & 3 rules.
+                    Logic 2 &amp; 3 rules.
                   </li>
                   <li>
                     Logic <b>2, 3</b> — switch to the <b>Rate Bands</b> sheet
@@ -182,10 +316,119 @@ export default function BulkEditDocs({ open, onClose }) {
 
           <Divider />
 
+          {/* ── Column reference ── */}
+          <BlockStack gap="300">
+            <div id="bulk-docs-columns" />
+            <Text variant="headingMd" as="h3">
+              Column reference
+            </Text>
+            <Text tone="subdued">
+              What each column does on the two editable sheets.
+            </Text>
+
+            <BlockStack gap="100">
+              <Text fontWeight="semibold" variant="bodySm">
+                Bulk Edit sheet
+              </Text>
+              <div className="bulk-docs-table-wrap">
+                <table className="bulk-docs-table bulk-docs-table--cols">
+                  <thead>
+                    <tr>
+                      <th>Column</th>
+                      <th>Required</th>
+                      <th>What to put in it</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {BULK_EDIT_COLUMNS.map((c) => (
+                      <tr key={c.col}>
+                        <td><b>{c.col}</b></td>
+                        <td className="bulk-docs-muted">{c.required}</td>
+                        <td>{c.body}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </BlockStack>
+
+            <BlockStack gap="100">
+              <Text fontWeight="semibold" variant="bodySm">
+                Rate Bands sheet
+              </Text>
+              <div className="bulk-docs-table-wrap">
+                <table className="bulk-docs-table bulk-docs-table--cols">
+                  <thead>
+                    <tr>
+                      <th>Column</th>
+                      <th>Required</th>
+                      <th>What to put in it</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {RATE_BANDS_COLUMNS.map((c) => (
+                      <tr key={c.col}>
+                        <td><b>{c.col}</b></td>
+                        <td className="bulk-docs-muted">{c.required}</td>
+                        <td>{c.body}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </BlockStack>
+          </BlockStack>
+
+          <Divider />
+
+          {/* ── Logic # reference (expanded table) ── */}
+          <BlockStack gap="300">
+            <div id="bulk-docs-logic" />
+            <Text variant="headingMd" as="h3">
+              Logic # reference
+            </Text>
+            <Text tone="subdued">
+              Each rule&apos;s pricing model is set with a single number in the{" "}
+              <b>Logic #</b> column. Leave it blank to keep the existing rule
+              unchanged. Set it to <b>0</b> to reset to Shopify Default.
+            </Text>
+            <div className="bulk-docs-table-wrap">
+              <table className="bulk-docs-table bulk-docs-table--logic">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Logic</th>
+                    <th>Where the rate lives</th>
+                    <th>Unit</th>
+                    <th>Example</th>
+                    <th>Use when…</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {LOGIC_REFERENCE.map((l) => (
+                    <tr key={l.num}>
+                      <td>
+                        <span className="bulk-logic-num">{l.num}</span>
+                      </td>
+                      <td><b>{l.label}</b></td>
+                      <td>{l.rateSource}</td>
+                      <td>{l.unit}</td>
+                      <td className="bulk-docs-example">{l.example}</td>
+                      <td>{l.use}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </BlockStack>
+
+          <Divider />
+
           {/* ── Worked example for category logic ── */}
           <BlockStack gap="200">
+            <div id="bulk-docs-example" />
             <Text variant="headingMd" as="h3">
-              Example · Weight Based with 3 slabs covering Australia
+              Worked example · Weight Based with 3 slabs covering Australia
             </Text>
             <Text tone="subdued">
               Coverage on the Bulk Edit sheet, slabs on the Rate Bands sheet —
@@ -293,6 +536,7 @@ export default function BulkEditDocs({ open, onClose }) {
 
           {/* ── Edge cases ── */}
           <BlockStack gap="200">
+            <div id="bulk-docs-edges" />
             <Text variant="headingMd" as="h3">
               Edge cases &amp; rules
             </Text>
@@ -341,33 +585,9 @@ export default function BulkEditDocs({ open, onClose }) {
 
           <Divider />
 
-          {/* ── Logic # reference ── */}
-          <BlockStack gap="200">
-            <Text variant="headingMd" as="h3">
-              Logic # reference
-            </Text>
-            <Text tone="subdued">
-              Each rule&apos;s shipping behaviour is set with a single number in
-              the Logic # column. Leave it blank to keep the existing rule
-              unchanged. Set it to <b>0</b> to reset to Shopify Default.
-            </Text>
-            <div className="bulk-logic-grid">
-              {LOGIC_REFERENCE.map((l) => (
-                <div key={l.num} className="bulk-logic-row">
-                  <span className="bulk-logic-num">{l.num}</span>
-                  <div>
-                    <div className="bulk-logic-label">{l.label}</div>
-                    <div className="bulk-logic-hint">{l.hint}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </BlockStack>
-
-          <Divider />
-
           {/* ── Country & zone code reference ── */}
           <BlockStack gap="300">
+            <div id="bulk-docs-codes" />
             <InlineStack
               align="space-between"
               blockAlign="center"

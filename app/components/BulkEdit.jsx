@@ -267,39 +267,39 @@ export default function BulkEdit({
           <BlockStack gap="400">
             {/* Step 1: download */}
             <Card>
-              <BlockStack gap="300">
-                <InlineStack align="space-between" blockAlign="center" gap="400" wrap={false}>
+              <BlockStack gap="400">
+                <BlockStack gap="100">
                   <Text variant="headingMd" as="h3">
                     Step 1 · Download the template
                   </Text>
-                  <InlineStack gap="200" wrap={false}>
-                    <Button onClick={() => setDocsOpen(true)}>
-                      View documentation
-                    </Button>
-                    <Button
-                      variant="primary"
-                      loading={downloading}
-                      onClick={handleDownloadTemplate}
-                      accessibilityLabel="Download Excel template"
-                    >
-                      Download .xlsx
-                    </Button>
-                  </InlineStack>
+                  <Text tone="subdued">
+                    The workbook ships with four sheets: <b>Bulk Edit</b> (coverage +
+                    logic, with Country / Zone dropdowns pre-filled), <b>Rate Bands</b>{" "}
+                    (slabs for Logic 2 &amp; 3 — one row per band, linked by Name),{" "}
+                    <b>All Regions</b> (read-only reference), and <b>Instructions</b>.
+                    Fill in only the rows you need.
+                  </Text>
+                </BlockStack>
+                <InlineStack align="end" gap="200" wrap={false}>
+                  <Button onClick={() => setDocsOpen(true)}>
+                    View documentation
+                  </Button>
+                  <Button
+                    variant="primary"
+                    loading={downloading}
+                    onClick={handleDownloadTemplate}
+                    accessibilityLabel="Download Excel template"
+                  >
+                    Download .xlsx
+                  </Button>
                 </InlineStack>
-                <Text tone="subdued">
-                  The workbook ships with four sheets: <b>Bulk Edit</b> (coverage +
-                  logic, with Country / Zone dropdowns pre-filled), <b>Rate Bands</b>{" "}
-                  (slabs for Logic 2 &amp; 3 — one row per band, linked by Name),{" "}
-                  <b>All Regions</b> (read-only reference), and <b>Instructions</b>.
-                  Fill in only the rows you need.
-                </Text>
               </BlockStack>
             </Card>
 
             {/* Step 2: upload */}
             <Card>
-              <BlockStack gap="300">
-                <BlockStack gap="050">
+              <BlockStack gap="400">
+                <BlockStack gap="100">
                   <Text variant="headingMd" as="h3">Step 2 · Upload the filled template</Text>
                   <Text tone="subdued">
                     Uploading replaces the entire <b>bulk-edit ruleset</b> for this
@@ -364,26 +364,24 @@ export default function BulkEdit({
             {/* Feature toggle — managed by app, kept beside the workflow itself */}
             {onToggleEnabled && (
               <Card>
-                <Box padding="300">
-                  <InlineStack align="space-between" blockAlign="center" wrap={false}>
-                    <BlockStack gap="050">
-                      <InlineStack gap="200" blockAlign="center">
-                        <Text variant="headingSm" as="h3">Bulk Edit</Text>
-                        <Badge tone="success">On</Badge>
-                      </InlineStack>
-                      <Text tone="subdued" variant="bodySm">
-                        Import shipping rules from an Excel template · Managed by app
-                      </Text>
-                    </BlockStack>
-                    <Button
-                      tone="critical"
-                      loading={toggling}
-                      onClick={() => onToggleEnabled(false)}
-                    >
-                      Turn off
-                    </Button>
-                  </InlineStack>
-                </Box>
+                <InlineStack align="space-between" blockAlign="center" gap="400" wrap={false}>
+                  <BlockStack gap="100">
+                    <InlineStack gap="200" blockAlign="center">
+                      <Text variant="headingMd" as="h3">Bulk Edit</Text>
+                      <Badge tone="success">On</Badge>
+                    </InlineStack>
+                    <Text tone="subdued">
+                      Import shipping rules from an Excel template · Managed by app
+                    </Text>
+                  </BlockStack>
+                  <Button
+                    tone="critical"
+                    loading={toggling}
+                    onClick={() => onToggleEnabled(false)}
+                  >
+                    Turn off
+                  </Button>
+                </InlineStack>
               </Card>
             )}
 
@@ -406,32 +404,17 @@ export default function BulkEdit({
             {/* Last upload — only when a previous file is stored */}
             {lastUpload && (
               <Card>
-                <BlockStack gap="300">
-                  <InlineStack align="space-between" blockAlign="center" gap="400" wrap={false}>
+                <BlockStack gap="400">
+                  <BlockStack gap="100">
                     <Text variant="headingMd" as="h3">
                       Last uploaded file
                     </Text>
-                    <InlineStack gap="200" wrap={false}>
-                      <Button
-                        loading={downloadingLast}
-                        onClick={() => setConfirmDownload(true)}
-                      >
-                        Download
-                      </Button>
-                      <Button
-                        tone="critical"
-                        loading={deleteFetcher.state !== "idle"}
-                        onClick={() => setConfirmDelete(true)}
-                      >
-                        Delete
-                      </Button>
-                    </InlineStack>
-                  </InlineStack>
-                  <Text tone="subdued">
-                    Download this to tweak a row, then delete the stored copy and
-                    upload the edited version. Re-uploading replaces every existing
-                    rule.
-                  </Text>
+                    <Text tone="subdued">
+                      Download this to tweak a row, then delete the stored copy and
+                      upload the edited version. Re-uploading replaces every existing
+                      rule.
+                    </Text>
+                  </BlockStack>
                   <Box
                     padding="300"
                     background="bg-surface-secondary"
@@ -445,6 +428,21 @@ export default function BulkEdit({
                       </Text>
                     </BlockStack>
                   </Box>
+                  <InlineStack align="end" gap="200" wrap={false}>
+                    <Button
+                      loading={downloadingLast}
+                      onClick={() => setConfirmDownload(true)}
+                    >
+                      Download
+                    </Button>
+                    <Button
+                      tone="critical"
+                      loading={deleteFetcher.state !== "idle"}
+                      onClick={() => setConfirmDelete(true)}
+                    >
+                      Delete
+                    </Button>
+                  </InlineStack>
                 </BlockStack>
               </Card>
             )}

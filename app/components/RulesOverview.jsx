@@ -387,7 +387,18 @@ export default function RulesOverview({
       if (!rateField) {
         setEditError("Unsupported pricing model for inline edit."); return;
       }
-      rulesPayload = JSON.stringify({ [rateField]: rateN });
+      /* Preserve existing per-destination overrides so the optimistic patch
+         matches what the server will write back. Without this, real and
+         ovr rulesJson diverge for rules with overrides and the parity-drop
+         in the parent never fires — leaving the optimistic state hanging
+         around and masking the loader's canonical view. */
+      const payload = { [rateField]: rateN };
+      let prior = {};
+      try { prior = JSON.parse(editingRule.rulesJson || "{}"); } catch { prior = {}; }
+      if (Array.isArray(prior.overrides) && prior.overrides.length > 0) {
+        payload.overrides = prior.overrides;
+      }
+      rulesPayload = JSON.stringify(payload);
     }
 
     /* Stash the optimistic patch keyed by rule id so the table can re-render

@@ -1241,9 +1241,7 @@ export default function RulesOverview({
       </Modal>
 
       {/* ── Delete-confirmation modal ─────────────────────────────────────
-          Asks the vendor to confirm before wiping a single bulk rule.
-          The stored xlsx blob is rebuilt server-side from the remaining
-          rules so the "Last uploaded file" download stays in sync. */}
+          Asks the vendor to confirm before wiping a single bulk rule. */}
       <Modal
         open={!!confirmDeleteId}
         onClose={() => setConfirmDeleteId(null)}

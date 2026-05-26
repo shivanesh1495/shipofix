@@ -17,28 +17,21 @@ import {
   DropZone,
   InlineStack,
   List,
-  Modal,
   Text,
 } from "@shopify/polaris";
 import BulkEditDocs from "./BulkEditDocs";
 
 export default function BulkEdit({
   enabled,
-  lastUpload = null,
   onToast,
   onApplied,
   onToggleEnabled,
   toggling = false,
 }) {
   const fetcher = useFetcher();
-  const deleteFetcher = useFetcher();
   const [file, setFile] = useState(null);
   const [lastResult, setLastResult] = useState(null);
   const [downloading, setDownloading] = useState(false);
-  const [downloadingLast, setDownloadingLast] = useState(false);
-  const [confirmDownload, setConfirmDownload] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [lastDeleteData, setLastDeleteData] = useState(null);
   const [docsOpen, setDocsOpen] = useState(false);
 
   const handleDrop = useCallback((_dropped, accepted) => {
@@ -82,58 +75,8 @@ export default function BulkEdit({
     });
   }, [fetcher, file]);
 
-  const handleDownloadLast = useCallback(async () => {
-    if (downloadingLast || !lastUpload) return;
-    setConfirmDownload(false);
-    setDownloadingLast(true);
-    try {
-      const res = await fetch("/app/bulk-edit?intent=last", {
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error(`Server returned ${res.status}`);
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = lastUpload.filename || "shipofix-last-upload.xlsx";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      if (onToast) onToast(`Error: Could not download last upload (${e.message})`);
-    } finally {
-      setDownloadingLast(false);
-    }
-  }, [downloadingLast, lastUpload, onToast]);
-
-  const handleDeleteLast = useCallback(() => {
-    setConfirmDelete(false);
-    const body = new FormData();
-    body.set("intent", "delete_last");
-    deleteFetcher.submit(body, {
-      method: "POST",
-      action: "/app/bulk-edit",
-    });
-  }, [deleteFetcher]);
-
-  /* Surface delete result via the same toast pipe (don't navigate — staying
-     on the Bulk Edit tab is the right thing here). Effect, not render-time,
-     so we don't update the parent component while this one is rendering. */
-  useEffect(() => {
-    if (
-      deleteFetcher.state !== "idle" ||
-      !deleteFetcher.data ||
-      deleteFetcher.data === lastDeleteData
-    ) {
-      return;
-    }
-    setLastDeleteData(deleteFetcher.data);
-    if (deleteFetcher.data.message && onToast) onToast(deleteFetcher.data.message);
-    if (deleteFetcher.data.error && onToast) onToast(`Error: ${deleteFetcher.data.error}`);
-  }, [deleteFetcher.state, deleteFetcher.data, lastDeleteData, onToast]);
-
-  // Surface upload result when fetcher settles (also an effect for the same reason).
+  // Surface upload result when fetcher settles (effect, not render-time,
+  // so we don't update the parent component while this one is rendering).
   useEffect(() => {
     if (
       fetcher.state !== "idle" ||
@@ -261,9 +204,8 @@ export default function BulkEdit({
       {/* Two-column layout. LEFT column holds the full workflow top-to-
           bottom: Step 1 (download) → Step 2 (upload) → result banners.
           RIGHT column holds context that doesn't move with the flow:
-          the feature toggle, the docs pointer, and the last-upload file
-          (when a previous upload exists). Collapses to one column under
-          980 px via the bulk-edit-split CSS class. */}
+          the feature toggle and the docs pointer. Collapses to one column
+          under 980 px via the bulk-edit-split CSS class. */}
       <div className="bulk-edit-split">
         {/* ── LEFT column: Step 1 → Step 2 → results ── */}
         <div className="bulk-edit-split-col">
@@ -361,7 +303,7 @@ export default function BulkEdit({
           </BlockStack>
         </div>
 
-        {/* ── RIGHT column: feature toggle, docs pointer, last upload ── */}
+        {/* ── RIGHT column: feature toggle, docs pointer ── */}
         <div className="bulk-edit-split-col">
           <BlockStack gap="400">
             {/* Feature toggle — managed by app, kept beside the workflow itself */}
@@ -404,117 +346,12 @@ export default function BulkEdit({
               </Text>
             </Banner>
 
-            {/* Last upload — only when a previous file is stored */}
-            {lastUpload && (
-              <Card>
-                <BlockStack gap="400">
-                  <BlockStack gap="100">
-                    <Text variant="headingMd" as="h3">
-                      Last uploaded file
-                    </Text>
-                    <Text tone="subdued">
-                      Download to tweak rows in Excel, then upload the edited
-                      version. The download is rebuilt from your current rules,
-                      so any inline edits you&apos;ve made on the <b>All rates</b>{" "}
-                      tab are included. Re-uploading replaces every existing rule.
-                    </Text>
-                  </BlockStack>
-                  <Box
-                    padding="300"
-                    background="bg-surface-secondary"
-                    borderRadius="200"
-                  >
-                    <BlockStack gap="050">
-                      <Text fontWeight="semibold">{lastUpload.filename}</Text>
-                      <Text tone="subdued" variant="bodySm">
-                        {(lastUpload.size / 1024).toFixed(1)} KB · uploaded{" "}
-                        {new Date(lastUpload.uploadedAt).toLocaleString()}
-                      </Text>
-                    </BlockStack>
-                  </Box>
-                  <InlineStack align="end" gap="200" wrap={false}>
-                    <Button
-                      loading={downloadingLast}
-                      onClick={() => setConfirmDownload(true)}
-                    >
-                      Download
-                    </Button>
-                    <Button
-                      tone="critical"
-                      loading={deleteFetcher.state !== "idle"}
-                      onClick={() => setConfirmDelete(true)}
-                    >
-                      Delete
-                    </Button>
-                  </InlineStack>
-                </BlockStack>
-              </Card>
-            )}
           </BlockStack>
         </div>
       </div>
 
-      {/* Download-last confirmation */}
-      <Modal
-        open={confirmDownload}
-        onClose={() => setConfirmDownload(false)}
-        title="Download last uploaded file?"
-        primaryAction={{
-          content: "Download",
-          onAction: handleDownloadLast,
-          loading: downloadingLast,
-        }}
-        secondaryActions={[
-          { content: "Cancel", onAction: () => setConfirmDownload(false) },
-        ]}
-      >
-        <Modal.Section>
-          <BlockStack gap="200">
-            <Text>
-              You&apos;ll get a fresh xlsx built from your current rules
-              {lastUpload?.filename ? ` (saved as ${lastUpload.filename})` : ""},
-              including any inline edits you made on the <b>All rates</b> tab.
-            </Text>
-            <Text tone="subdued" variant="bodySm">
-              Edit it offline, then upload the edited version to replace your
-              current rules.
-            </Text>
-          </BlockStack>
-        </Modal.Section>
-      </Modal>
-
       {/* Full Excel walkthrough — Logic # reference, country codes, examples */}
       <BulkEditDocs open={docsOpen} onClose={() => setDocsOpen(false)} />
-
-      {/* Delete-last confirmation */}
-      <Modal
-        open={confirmDelete}
-        onClose={() => setConfirmDelete(false)}
-        title="Delete stored upload and all its rules?"
-        primaryAction={{
-          content: "Delete file and rules",
-          destructive: true,
-          onAction: handleDeleteLast,
-          loading: deleteFetcher.state !== "idle",
-        }}
-        secondaryActions={[
-          { content: "Cancel", onAction: () => setConfirmDelete(false) },
-        ]}
-      >
-        <Modal.Section>
-          <BlockStack gap="200">
-            <Text>
-              This removes <b>{lastUpload?.filename || "the last upload"}</b>{" "}
-              AND every bulk-edit rule it created. Your <b>All rates</b> table
-              will be empty until you upload a new file.
-            </Text>
-            <Text tone="subdued" variant="bodySm">
-              Zone-by-zone rules in <b>Set up rates</b> are not affected —
-              they take over again the moment Bulk edit is turned off.
-            </Text>
-          </BlockStack>
-        </Modal.Section>
-      </Modal>
     </BlockStack>
   );
 }

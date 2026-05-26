@@ -203,24 +203,6 @@ export const loader = async ({ request }) => {
   });
   const bulkEditEnabled = appSetting ? appSetting.bulkEditEnabled : true;
 
-  /* Metadata for the last Bulk Edit file the vendor uploaded — used by the
-     Bulk Edit panel to show download/delete affordances. The file bytes
-     themselves are streamed by the resource route (intent=last).
-     Guarded the same way as bulkEditRule above. */
-  const lastUploadRow = prisma.bulkEditUpload
-    ? await prisma.bulkEditUpload.findUnique({
-        where: { shop: shopDomain },
-        select: { filename: true, size: true, uploadedAt: true },
-      })
-    : null;
-  const lastBulkUpload = lastUploadRow
-    ? {
-        filename: lastUploadRow.filename,
-        size: lastUploadRow.size,
-        uploadedAt: lastUploadRow.uploadedAt.toISOString(),
-      }
-    : null;
-
   return {
     zones: combined,
     /* Bulk rules are independent of Shopify zones — Rules Overview renders
@@ -231,7 +213,6 @@ export const loader = async ({ request }) => {
     profileId,
     locationGroupId,
     bulkEditEnabled,
-    lastBulkUpload,
     shippingUrl: `https://${shopDomain}/admin/settings/shipping`,
   };
 };
@@ -479,7 +460,6 @@ export default function ShippingDashboard() {
     profileId,
     locationGroupId,
     bulkEditEnabled,
-    lastBulkUpload,
   } = useLoaderData();
   const actionData = useActionData();
   const fetcher = useFetcher();
@@ -917,7 +897,6 @@ export default function ShippingDashboard() {
               ) : (
                 <BulkEdit
                   enabled={bulkEditEnabled}
-                  lastUpload={lastBulkUpload}
                   onToast={(m) => {
                     setToastMsg(m);
                     revalidator.revalidate();

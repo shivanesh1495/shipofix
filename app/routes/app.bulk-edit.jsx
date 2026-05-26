@@ -1205,6 +1205,63 @@ export const action = async ({ request }) => {
     return { success: true, message: `Rule "${nextName}" updated.` };
   }
 
+  /* Delete a single BulkEditRule from the Rules Overview tab. The stored
+     xlsx blob is rebuilt from the remaining rules so the "Last uploaded
+     file" download stays in sync; if no rules remain, the blob is dropped
+     entirely. */
+  if (intent === "delete_rule") {
+    if (!prisma.bulkEditRule) {
+      return {
+        success: false,
+        error:
+          "Bulk Edit storage isn't initialised yet. Run `npx prisma generate` and restart.",
+      };
+    }
+    const id = String(formData.get("id") || "").trim();
+    if (!id) return { success: false, error: "Missing rule id." };
+
+    const existing = await prisma.bulkEditRule.findFirst({
+      where: { id, shop: shopDomain },
+    });
+    if (!existing) return { success: false, error: "Rule not found for this shop." };
+
+    const deletedName = existing.name;
+    await prisma.bulkEditRule.delete({ where: { id } });
+
+    const remaining = await prisma.bulkEditRule.findMany({
+      where: { shop: shopDomain },
+    });
+
+    if (prisma.bulkEditUpload) {
+      if (remaining.length === 0) {
+        await prisma.bulkEditUpload.deleteMany({ where: { shop: shopDomain } });
+      } else {
+        const lastRow = await prisma.bulkEditUpload.findUnique({
+          where: { shop: shopDomain },
+        });
+        const buf = await buildWorkbookFromBulkRules(remaining);
+        const filename = lastRow?.filename || "shipofix-bulk-edit.xlsx";
+        await prisma.bulkEditUpload.upsert({
+          where: { shop: shopDomain },
+          update: {
+            filename,
+            size: buf.length,
+            data: buf,
+            uploadedAt: new Date(),
+          },
+          create: {
+            shop: shopDomain,
+            filename,
+            size: buf.length,
+            data: buf,
+          },
+        });
+      }
+    }
+
+    return { success: true, message: `Rule "${deletedName}" deleted.` };
+  }
+
   /* Drop the stored last-upload file AND every bulk-edit rule that came
      from it. Vendor-initiated cleanup: deleting the spreadsheet should
      also clear the rules it created — otherwise the table on the All

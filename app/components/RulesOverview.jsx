@@ -335,8 +335,12 @@ export default function RulesOverview({
 }) {
   /* ── Inline edit modal state ─────────────────────────────────────────── */
   const editFetcher = useFetcher();
+  const deleteFetcher = useFetcher();
   const pendingPatchRef = useRef(null);
+  const pendingDeleteRef = useRef(null);
   const [editingRuleId, setEditingRuleId] = useState(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [locallyDeletedIds, setLocallyDeletedIds] = useState(() => new Set());
   /* Read-only details modal — shown when the user clicks the View button. */
   const [viewingRuleId, setViewingRuleId] = useState(null);
   const [editName, setEditName] = useState("");
@@ -383,15 +387,33 @@ export default function RulesOverview({
     });
   }, [bulkRules]);
 
-  /* Merge bulkRules with the local optimistic edits. Everything downstream
-     (the table, the edit modal, search/filter) reads from this. */
+  /* Drop a local-delete marker the moment the canonical loader data
+     confirms the rule is gone, so a failed delete that revalidates back
+     to "still exists" stops being optimistically hidden. */
+  useEffect(() => {
+    setLocallyDeletedIds((prev) => {
+      if (prev.size === 0) return prev;
+      const next = new Set();
+      for (const id of prev) {
+        if (bulkRules.some((r) => r.id === id)) next.add(id);
+      }
+      return next.size === prev.size ? prev : next;
+    });
+  }, [bulkRules]);
+
+  /* Merge bulkRules with the local optimistic edits, then hide any rules
+     the user just deleted. Everything downstream (the table, the edit
+     modal, search/filter) reads from this. */
   const effectiveBulkRules = useMemo(() => {
-    if (Object.keys(localEdits).length === 0) return bulkRules;
-    return bulkRules.map((r) => {
+    const filtered = locallyDeletedIds.size === 0
+      ? bulkRules
+      : bulkRules.filter((r) => !locallyDeletedIds.has(r.id));
+    if (Object.keys(localEdits).length === 0) return filtered;
+    return filtered.map((r) => {
       const ovr = localEdits[r.id];
       return ovr ? { ...r, ...ovr } : r;
     });
-  }, [bulkRules, localEdits]);
+  }, [bulkRules, localEdits, locallyDeletedIds]);
 
   const editingRule = useMemo(
     () => effectiveBulkRules.find((r) => r.id === editingRuleId) || null,
@@ -599,6 +621,59 @@ export default function RulesOverview({
   }, [editFetcher.state, editFetcher.data, lastHandledEdit, onBulkRuleEdited]);
 
   const saving = editFetcher.state === "submitting" || editFetcher.state === "loading";
+  const deleting = deleteFetcher.state === "submitting" || deleteFetcher.state === "loading";
+
+  /* Confirm-and-fire delete. Optimistically hides the row immediately;
+     the result-handling effect below either keeps it hidden (success →
+     loader revalidation will remove the rule from bulkRules and the
+     prune effect clears the marker) or restores it on failure. */
+  const handleConfirmDelete = useCallback(() => {
+    if (!confirmDeleteId) return;
+    const id = confirmDeleteId;
+    pendingDeleteRef.current = id;
+    setLocallyDeletedIds((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+    const body = new FormData();
+    body.set("intent", "delete_rule");
+    body.set("id", id);
+    deleteFetcher.submit(body, { method: "POST", action: "/app/bulk-edit" });
+    setConfirmDeleteId(null);
+  }, [confirmDeleteId, deleteFetcher]);
+
+  const [lastHandledDelete, setLastHandledDelete] = useState(null);
+  useEffect(() => {
+    if (deleteFetcher.state !== "idle") return;
+    if (!deleteFetcher.data || deleteFetcher.data === lastHandledDelete) return;
+    setLastHandledDelete(deleteFetcher.data);
+    if (deleteFetcher.data.success) {
+      if (typeof window !== "undefined" && window.shopify?.toast?.show) {
+        window.shopify.toast.show(deleteFetcher.data.message || "Rule deleted");
+      }
+      pendingDeleteRef.current = null;
+    } else if (deleteFetcher.data.error) {
+      const id = pendingDeleteRef.current;
+      if (id) {
+        setLocallyDeletedIds((prev) => {
+          if (!prev.has(id)) return prev;
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+      }
+      pendingDeleteRef.current = null;
+      if (typeof window !== "undefined" && window.shopify?.toast?.show) {
+        window.shopify.toast.show(deleteFetcher.data.error, { isError: true });
+      }
+    }
+  }, [deleteFetcher.state, deleteFetcher.data, lastHandledDelete]);
+
+  const ruleBeingDeleted = useMemo(
+    () => effectiveBulkRules.find((r) => r.id === confirmDeleteId) || null,
+    [effectiveBulkRules, confirmDeleteId],
+  );
   /* Spreadsheet-style rows for Bulk-Edit mode. Sort rules first so the
      leading row of each rule stays together with its coverage rows. */
   /* One-row-per-rule summaries for the collapsed bulk-mode table. */
@@ -785,6 +860,16 @@ export default function RulesOverview({
                         disabled={saving}
                       >
                         Edit
+                      </Button>
+                      <Button
+                        size="micro"
+                        tone="critical"
+                        icon={DeleteIcon}
+                        accessibilityLabel={`Delete rule ${s.name}`}
+                        onClick={() => setConfirmDeleteId(s.id)}
+                        disabled={deleting}
+                      >
+                        Delete
                       </Button>
                     </InlineStack>,
                   ])}
@@ -1153,6 +1238,48 @@ export default function RulesOverview({
             </BlockStack>
           </Modal.Section>
         )}
+      </Modal>
+
+      {/* ── Delete-confirmation modal ─────────────────────────────────────
+          Asks the vendor to confirm before wiping a single bulk rule.
+          The stored xlsx blob is rebuilt server-side from the remaining
+          rules so the "Last uploaded file" download stays in sync. */}
+      <Modal
+        open={!!confirmDeleteId}
+        onClose={() => setConfirmDeleteId(null)}
+        title={
+          ruleBeingDeleted
+            ? `Delete "${ruleBeingDeleted.name}"?`
+            : "Delete rule?"
+        }
+        primaryAction={{
+          content: "Delete rule",
+          destructive: true,
+          onAction: handleConfirmDelete,
+          loading: deleting,
+          disabled: deleting,
+        }}
+        secondaryActions={[
+          {
+            content: "Cancel",
+            onAction: () => setConfirmDeleteId(null),
+            disabled: deleting,
+          },
+        ]}
+      >
+        <Modal.Section>
+          <BlockStack gap="200">
+            <Text>
+              This permanently removes the rule from your bulk-edit rates.
+              The stored spreadsheet will be rebuilt from the remaining
+              rules.
+            </Text>
+            <Text tone="subdued" variant="bodySm">
+              This can't be undone — to bring the rule back you'll need to
+              re-upload it.
+            </Text>
+          </BlockStack>
+        </Modal.Section>
       </Modal>
     </Box>
   );

@@ -196,9 +196,6 @@ export default function BulkEdit({ onToast, onApplied }) {
                   </Text>
                 </BlockStack>
                 <InlineStack align="end" gap="200" wrap={false}>
-                  <Button onClick={() => setDocsOpen(true)}>
-                    View documentation
-                  </Button>
                   <Button
                     variant="primary"
                     loading={downloading}

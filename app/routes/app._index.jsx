@@ -5,7 +5,6 @@ import {
   BlockStack,
   Box,
   Button,
-  InlineStack,
   Page,
   Tabs,
   Text,
@@ -671,16 +670,13 @@ export default function ShippingDashboard() {
           )}
 
           {/* ── Main content ── */}
-          <Tabs tabs={tabs} selected={selectedTab} onSelect={setSelectedTab}>
-            <Box paddingBlockStart="300" paddingInlineStart="400" paddingInlineEnd="400">
-              <InlineStack align="space-between" blockAlign="center" gap="400" wrap={false}>
-                <Text tone="subdued" variant="bodySm">
-                  {tabDescriptions[selectedTab]}
-                </Text>
-                {/* Bulk Edit has its own inline "View documentation" buttons
-                    and a dedicated guide modal, so hiding the global Help
-                    guide on that tab keeps the toolbar from looking redundant. */}
-                {selectedTab !== 1 && (
+          <BlockStack gap="0">
+            {/* Navbar: tab pills on the left, Help guide on the right */}
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              <Tabs tabs={tabs} selected={selectedTab} onSelect={setSelectedTab} />
+              {/* Hidden on Bulk Edit — that tab has its own inline docs buttons */}
+              {selectedTab !== 1 && (
+                <div style={{ marginLeft: "auto" }}>
                   <Button
                     icon={InfoIcon}
                     onClick={() => shopify.modal.show("docs-modal")}
@@ -688,8 +684,14 @@ export default function ShippingDashboard() {
                   >
                     Help guide
                   </Button>
-                )}
-              </InlineStack>
+                </div>
+              )}
+            </div>
+
+            <Box paddingBlockStart="300" paddingInlineStart="400" paddingInlineEnd="400">
+              <Text tone="subdued" variant="bodySm">
+                {tabDescriptions[selectedTab]}
+              </Text>
             </Box>
 
             <Box paddingBlockStart="400">
@@ -724,7 +726,7 @@ export default function ShippingDashboard() {
                 />
               )}
             </Box>
-          </Tabs>
+          </BlockStack>
         </BlockStack>
       </div>
 

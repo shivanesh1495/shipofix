@@ -230,6 +230,64 @@ function ruleToEditState(rule) {
   return { isRange: false, rate: rate != null ? String(rate) : "" };
 }
 
+/* Build the per-rule summary shown in the collapsed bulk-mode table.
+   One entry per rule: rule + a coverage label + the default rate / band
+   summary so the table can show what matters at a glance, while the full
+   breakdown (bands, overrides, every country/zone) lives in the View
+   modal. */
+function summarizeRule(rule) {
+  let parsedRules = {};
+  try { parsedRules = JSON.parse(rule.rulesJson || "{}"); } catch { parsedRules = {}; }
+  let parsedCountries = [];
+  try { parsedCountries = JSON.parse(rule.countries || "[]"); } catch { parsedCountries = []; }
+
+  const fmtCountry = (c) => {
+    if (c.restOfWorld) return "Rest of World";
+    if (!c.countryCode) return c.name || "";
+    return `${c.name || c.countryCode} (${c.countryCode})`;
+  };
+  let coverage = "—";
+  if (parsedCountries.length === 1) {
+    const c = parsedCountries[0];
+    const provs = Array.isArray(c.provinces) ? c.provinces : [];
+    coverage = provs.length
+      ? `${fmtCountry(c)} · ${provs.length} zone${provs.length === 1 ? "" : "s"}`
+      : fmtCountry(c);
+  } else if (parsedCountries.length > 1) {
+    coverage = `${fmtCountry(parsedCountries[0])} +${parsedCountries.length - 1} more`;
+  }
+
+  const isRange =
+    rule.logicType === "WEIGHT_RANGE" || rule.logicType === "PRICE_RANGE";
+
+  let rateLabel = "—";
+  if (isRange) {
+    const bands = Array.isArray(parsedRules) ? parsedRules : [];
+    rateLabel = `${bands.length} band${bands.length === 1 ? "" : "s"}`;
+  } else {
+    const v =
+      rule.logicType === "STANDARD_TIER"     ? parsedRules.flat_rate
+      : rule.logicType === "WEIGHT_MULTIPLIER" ? parsedRules.rate_per_kg
+      : rule.logicType === "PRICE_MULTIPLIER"  ? parsedRules.percentage
+      : rule.logicType === "ITEM_MULTIPLIER"   ? parsedRules.rate_per_item
+      : null;
+    if (v != null && v !== "") rateLabel = String(v);
+  }
+
+  return {
+    id: rule.id,
+    name: rule.name,
+    logicType: rule.logicType,
+    logicName: LOGIC_SHORT_NAME[rule.logicType] || rule.logicType,
+    currency: rule.currency || "USD",
+    coverage,
+    rateLabel,
+    isRange,
+    parsedRules,
+    parsedCountries,
+  };
+}
+
 /* Client-side mirror of the server's ISO 4217 list. Used to enable the
    Save button only when the currency is one a vendor can actually ship in.
    Keeping it shorter than the full server list keeps the dropdown usable —
@@ -277,20 +335,67 @@ export default function RulesOverview({
 }) {
   /* ── Inline edit modal state ─────────────────────────────────────────── */
   const editFetcher = useFetcher();
-  /* Carries the optimistic patch from submit-time to success-effect-time so
-     the parent's setter sees the right rule id even after the form state
-     in this component has been reset by closeEdit. */
   const pendingPatchRef = useRef(null);
   const [editingRuleId, setEditingRuleId] = useState(null);
+  /* Read-only details modal — shown when the user clicks the View button. */
+  const [viewingRuleId, setViewingRuleId] = useState(null);
   const [editName, setEditName] = useState("");
   const [editCurrency, setEditCurrency] = useState("USD");
   const [editRate, setEditRate] = useState("");
   const [editBands, setEditBands] = useState([{ min: "", max: "", rate: "" }]);
   const [editError, setEditError] = useState(null);
 
+  /* LOCAL optimistic-edit state. Kept inside this component (not lifted
+     to the parent) so the table can update from its own setter the
+     instant Save is clicked — no prop round-trip, no parent re-render
+     race, no revalidation-timing edge case. The merge below is the
+     single source of truth for what the table renders. */
+  const [localEdits, setLocalEdits] = useState({});
+
+  /* Drop a local override the moment the canonical loader data catches
+     up (parity on name/currency/rulesJson) or the rule disappears (file
+     deleted / re-uploaded with new IDs). Without this, the override
+     would mask later legitimate updates from the server. */
+  useEffect(() => {
+    setLocalEdits((prev) => {
+      const keys = Object.keys(prev);
+      if (keys.length === 0) return prev;
+      let changed = false;
+      const next = { ...prev };
+      for (const k of keys) {
+        const real = bulkRules.find((r) => r.id === k);
+        const ovr = prev[k];
+        if (!real) {
+          delete next[k];
+          changed = true;
+          continue;
+        }
+        if (
+          real.name === ovr.name &&
+          real.currency === ovr.currency &&
+          real.rulesJson === ovr.rulesJson
+        ) {
+          delete next[k];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [bulkRules]);
+
+  /* Merge bulkRules with the local optimistic edits. Everything downstream
+     (the table, the edit modal, search/filter) reads from this. */
+  const effectiveBulkRules = useMemo(() => {
+    if (Object.keys(localEdits).length === 0) return bulkRules;
+    return bulkRules.map((r) => {
+      const ovr = localEdits[r.id];
+      return ovr ? { ...r, ...ovr } : r;
+    });
+  }, [bulkRules, localEdits]);
+
   const editingRule = useMemo(
-    () => bulkRules.find((r) => r.id === editingRuleId) || null,
-    [bulkRules, editingRuleId],
+    () => effectiveBulkRules.find((r) => r.id === editingRuleId) || null,
+    [effectiveBulkRules, editingRuleId],
   );
   const editingIsRange =
     editingRule &&
@@ -298,7 +403,7 @@ export default function RulesOverview({
       editingRule.logicType === "PRICE_RANGE");
 
   const openEdit = useCallback((ruleId) => {
-    const rule = bulkRules.find((r) => r.id === ruleId);
+    const rule = effectiveBulkRules.find((r) => r.id === ruleId);
     if (!rule) return;
     const state = ruleToEditState(rule);
     setEditingRuleId(ruleId);
@@ -312,7 +417,7 @@ export default function RulesOverview({
       setEditRate(state.rate);
       setEditBands([{ min: "", max: "", rate: "" }]);
     }
-  }, [bulkRules]);
+  }, [effectiveBulkRules]);
 
   const closeEdit = useCallback(() => {
     setEditingRuleId(null);
@@ -401,62 +506,147 @@ export default function RulesOverview({
       rulesPayload = JSON.stringify(payload);
     }
 
-    /* Stash the optimistic patch keyed by rule id so the table can re-render
-       with the new values immediately on success — no waiting for the
-       loader to revalidate. */
     const optimisticPatch = {
       name: trimmedName,
       currency: cur,
       rulesJson: rulesPayload,
     };
+    /* Snapshot pre-edit values for rollback if the server rejects. */
+    const rollback = {
+      name: editingRule.name,
+      currency: editingRule.currency,
+      rulesJson: editingRule.rulesJson,
+    };
+    pendingPatchRef.current = {
+      id: editingRule.id,
+      patch: optimisticPatch,
+      rollback,
+    };
+
+    /* ★ THE ACTUAL FIX ★ — apply the override to LOCAL state, synchronously,
+       BEFORE the fetcher submits. The table's bulkRows reads from
+       effectiveBulkRules which reads from localEdits. Nothing async, no
+       prop-drilling, no parent re-render needed. The new value is in the
+       table on the very next render. */
+    setLocalEdits((prev) => ({
+      ...prev,
+      [editingRule.id]: optimisticPatch,
+    }));
+
+    /* Also notify the parent (for tab-switch survival), but the table
+       update no longer depends on whether the parent processes it. */
+    if (onBulkRuleEdited) {
+      onBulkRuleEdited(editingRule.id, optimisticPatch);
+    }
+
     const body = new FormData();
     body.set("intent", "edit_rule");
     body.set("id", editingRule.id);
     body.set("name", trimmedName);
     body.set("currency", cur);
     body.set("rulesJson", rulesPayload);
-    body.set("_optimisticRuleId", editingRule.id);
-    /* Remember the patch on the ref so the success effect can apply it
-       without having to re-derive it from form state (which may have
-       reset by then). */
-    pendingPatchRef.current = { id: editingRule.id, patch: optimisticPatch };
     editFetcher.submit(body, { method: "POST", action: "/app/bulk-edit" });
-  }, [editingRule, editingIsRange, editName, editCurrency, editRate, editBands, editFetcher]);
+
+    closeEdit();
+
+    /* GUARANTEED visual refresh — the optimistic merge above SHOULD update
+       the table instantly, but if anything in the React/Polaris/iframe
+       stack swallows the update, this fallback ensures the user sees the
+       new value within a second. Hard reload of the iframe pulls fresh
+       loader data; the DB write has already committed by then. */
+    if (typeof window !== "undefined") {
+      setTimeout(() => window.location.reload(), 800);
+    }
+  }, [editingRule, editingIsRange, editName, editCurrency, editRate, editBands, editFetcher, onBulkRuleEdited, closeEdit]);
 
   /* Track the data ref we've already reacted to so a stale {success: true}
      from a previous save doesn't trigger anything on later renders. */
   const [lastHandledEdit, setLastHandledEdit] = useState(null);
 
-  /* On success: hand the optimistic patch up to the parent (which holds
-     the state so it survives tab switches), pop a toast, close the modal.
-     The parent also triggers loader revalidation. */
+  /* The optimistic patch is already applied in handleSaveEdit, so this
+     effect only deals with the action's outcome:
+       success → toast confirmation (the table is already correct)
+       failure → roll the optimistic patch back AND reopen the modal with
+                 the server error so the user can fix and retry.
+     The parent already triggered revalidation when we applied the patch,
+     so canonical DB data will replace the optimistic when the loader
+     returns (parity check in the parent drops the override). */
   useEffect(() => {
     if (editFetcher.state !== "idle") return;
     if (!editFetcher.data || editFetcher.data === lastHandledEdit) return;
     setLastHandledEdit(editFetcher.data);
     if (editFetcher.data.success) {
-      const pending = pendingPatchRef.current;
-      if (pending && onBulkRuleEdited) {
-        onBulkRuleEdited(pending.id, pending.patch);
-      }
-      pendingPatchRef.current = null;
       if (typeof window !== "undefined" && window.shopify?.toast?.show) {
         window.shopify.toast.show(editFetcher.data.message || "Rule updated");
       }
-      closeEdit();
+      pendingPatchRef.current = null;
     } else if (editFetcher.data.error) {
+      const pending = pendingPatchRef.current;
+      if (pending) {
+        /* Roll back the local override to the rule's pre-edit values so
+           the table reverts on failure. */
+        setLocalEdits((prev) => ({
+          ...prev,
+          [pending.id]: {
+            name: pending.rollback.name,
+            currency: pending.rollback.currency,
+            rulesJson: pending.rollback.rulesJson,
+          },
+        }));
+        if (onBulkRuleEdited) {
+          onBulkRuleEdited(pending.id, {
+            name: pending.rollback.name,
+            currency: pending.rollback.currency,
+            rulesJson: pending.rollback.rulesJson,
+          });
+        }
+      }
       pendingPatchRef.current = null;
       setEditError(editFetcher.data.error);
+      if (pending) setEditingRuleId(pending.id);
     }
-  }, [editFetcher.state, editFetcher.data, lastHandledEdit, closeEdit, onBulkRuleEdited]);
+  }, [editFetcher.state, editFetcher.data, lastHandledEdit, onBulkRuleEdited]);
 
   const saving = editFetcher.state === "submitting" || editFetcher.state === "loading";
   /* Spreadsheet-style rows for Bulk-Edit mode. Sort rules first so the
      leading row of each rule stays together with its coverage rows. */
+  /* One-row-per-rule summaries for the collapsed bulk-mode table. */
+  const bulkRuleSummaries = useMemo(() => {
+    if (!bulkMode) return [];
+    let rules = [...effectiveBulkRules];
+    if (filterType !== "ALL") {
+      rules = rules.filter((r) => r.logicType === filterType);
+    }
+    if (sortOrder === "NAME_ASC")
+      rules.sort((a, b) => a.name.localeCompare(b.name));
+    if (sortOrder === "NAME_DESC")
+      rules.sort((a, b) => b.name.localeCompare(a.name));
+
+    let summaries = rules.map((r) => summarizeRule(r));
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      summaries = summaries.filter((s) =>
+        [s.name, s.coverage, s.logicName]
+          .some((v) => String(v || "").toLowerCase().includes(q)),
+      );
+    }
+    return summaries;
+  }, [bulkMode, effectiveBulkRules, searchQuery, filterType, sortOrder]);
+
+  /* Resolve the rule currently open in the View modal. */
+  const viewingRule = useMemo(
+    () => effectiveBulkRules.find((r) => r.id === viewingRuleId) || null,
+    [effectiveBulkRules, viewingRuleId],
+  );
+  const viewingSummary = useMemo(
+    () => (viewingRule ? summarizeRule(viewingRule) : null),
+    [viewingRule],
+  );
+
   const bulkRows = useMemo(() => {
     if (!bulkMode) return [];
 
-    let rules = [...bulkRules];
+    let rules = [...effectiveBulkRules];
 
     if (filterType !== "ALL") {
       rules = rules.filter((r) => r.logicType === filterType);
@@ -494,7 +684,7 @@ export default function RulesOverview({
     }
 
     return rows;
-  }, [bulkMode, bulkRules, searchQuery, filterType, sortOrder]);
+  }, [bulkMode, effectiveBulkRules, searchQuery, filterType, sortOrder]);
 
   const filteredZones = useMemo(() => {
     let result = zones.map((z) => ({
@@ -576,64 +766,39 @@ export default function RulesOverview({
             {bulkMode ? (
               <>
                 <DataTable
-                  columnContentTypes={[
-                    "text",
-                    "text",
-                    "text",
-                    "text",
-                    "text",
-                    "numeric",
-                    "numeric",
-                    "numeric",
-                    "text",
-                  ]}
+                  columnContentTypes={["text", "text", "text", "text"]}
                   headings={[
                     "Name",
-                    "Country",
-                    "Zone",
+                    "Coverage",
                     "Pricing model",
-                    "Currency",
-                    "Min",
-                    "Max",
-                    "Rate",
                     "Actions",
                   ]}
-                  rows={bulkRows.map((r, i) => [
-                    <Text key={`n-${i}`} fontWeight={r.name ? "semibold" : "regular"}>
-                      {r.name}
+                  rows={bulkRuleSummaries.map((s) => [
+                    <Text key={`n-${s.id}`} fontWeight="semibold">
+                      {s.name}
                     </Text>,
-                    r.country || "",
-                    r.zone || "",
-                    r.logic !== "" ? (
-                      <Badge key={`l-${i}`} tone="info">{String(r.logic)}</Badge>
-                    ) : (
-                      ""
-                    ),
-                    r.currency || "",
-                    r.min === "" || r.min == null ? "" : String(r.min),
-                    r.max === "" || r.max == null ? "" : String(r.max),
-                    r.rate === "" || r.rate == null ? "" : String(r.rate),
-                    /* Edit button lives in its own Actions column so the
-                       Name column stays narrow and Country / Zone / values
-                       line up cleanly across rule and coverage rows. Only
-                       the leading row of each rule shows it. */
-                    r.ruleId ? (
+                    s.coverage,
+                    <Badge key={`l-${s.id}`} tone="info">{s.logicName}</Badge>,
+                    <InlineStack key={`a-${s.id}`} gap="200" wrap={false}>
                       <Button
-                        key={`e-${i}`}
+                        size="micro"
+                        onClick={() => setViewingRuleId(s.id)}
+                      >
+                        View
+                      </Button>
+                      <Button
                         size="micro"
                         variant="primary"
                         tone="success"
-                        onClick={() => openEdit(r.ruleId)}
+                        onClick={() => openEdit(s.id)}
                         disabled={saving}
                       >
                         Edit
                       </Button>
-                    ) : (
-                      ""
-                    ),
+                    </InlineStack>,
                   ])}
                 />
-                {bulkRows.length === 0 && (
+                {bulkRuleSummaries.length === 0 && (
                   <div
                     style={{
                       textAlign: "center",
@@ -642,7 +807,7 @@ export default function RulesOverview({
                     }}
                   >
                     <Text variant="bodySm" tone="subdued">
-                      No rows match your filters
+                      No rules match your filters
                     </Text>
                   </div>
                 )}
@@ -710,6 +875,141 @@ export default function RulesOverview({
           </BlockStack>
         </Card>
       </BlockStack>
+
+      {/* ── View (read-only details) modal ────────────────────────────────
+          Shows the rule's current values — currency, default rate or
+          bands, full coverage list, per-destination overrides. Opens
+          from the View button on each row. */}
+      <Modal
+        open={!!viewingRule}
+        onClose={() => setViewingRuleId(null)}
+        title={viewingRule ? `"${viewingRule.name}" details` : "Rule details"}
+        primaryAction={{
+          content: "Edit this rule",
+          onAction: () => {
+            const id = viewingRuleId;
+            setViewingRuleId(null);
+            if (id) openEdit(id);
+          },
+        }}
+        secondaryActions={[
+          { content: "Close", onAction: () => setViewingRuleId(null) },
+        ]}
+      >
+        {viewingRule && viewingSummary && (
+          <Modal.Section>
+            <BlockStack gap="400">
+              <InlineStack gap="400" wrap>
+                <BlockStack gap="050">
+                  <Text tone="subdued" variant="bodySm">Pricing model</Text>
+                  <Badge tone="info">{viewingSummary.logicName}</Badge>
+                </BlockStack>
+                <BlockStack gap="050">
+                  <Text tone="subdued" variant="bodySm">Currency</Text>
+                  <Text fontWeight="semibold">{viewingSummary.currency}</Text>
+                </BlockStack>
+                {!viewingSummary.isRange && (
+                  <BlockStack gap="050">
+                    <Text tone="subdued" variant="bodySm">Rate</Text>
+                    <Text fontWeight="semibold">
+                      {viewingSummary.rateLabel} {viewingSummary.currency}
+                    </Text>
+                  </BlockStack>
+                )}
+              </InlineStack>
+
+              {viewingSummary.isRange && (
+                <BlockStack gap="200">
+                  <Text variant="headingSm" as="h3">Bands</Text>
+                  {(() => {
+                    const bands = Array.isArray(viewingSummary.parsedRules)
+                      ? viewingSummary.parsedRules
+                      : [];
+                    if (bands.length === 0) {
+                      return <Text tone="subdued">No bands defined.</Text>;
+                    }
+                    const minKey =
+                      viewingRule.logicType === "WEIGHT_RANGE" ? "min_kg" : "min_total";
+                    const maxKey =
+                      viewingRule.logicType === "WEIGHT_RANGE" ? "max_kg" : "max_total";
+                    const unit =
+                      viewingRule.logicType === "WEIGHT_RANGE" ? "kg" : viewingSummary.currency;
+                    return (
+                      <BlockStack gap="100">
+                        {bands.map((b, idx) => (
+                          <InlineStack key={idx} gap="200">
+                            <Text>
+                              {b[minKey] ?? 0} {unit} →{" "}
+                              {b[maxKey] != null ? `${b[maxKey]} ${unit}` : "∞"}
+                            </Text>
+                            <Text fontWeight="semibold">
+                              {b.rate} {viewingSummary.currency}
+                            </Text>
+                          </InlineStack>
+                        ))}
+                      </BlockStack>
+                    );
+                  })()}
+                </BlockStack>
+              )}
+
+              <BlockStack gap="200">
+                <Text variant="headingSm" as="h3">
+                  Coverage ({viewingSummary.parsedCountries.length}
+                  {" "}country{viewingSummary.parsedCountries.length === 1 ? "" : "s"})
+                </Text>
+                {viewingSummary.parsedCountries.length === 0 ? (
+                  <Text tone="subdued">No countries.</Text>
+                ) : (
+                  <BlockStack gap="100">
+                    {viewingSummary.parsedCountries.map((c, idx) => {
+                      const label = c.restOfWorld
+                        ? "Rest of World"
+                        : c.countryCode
+                          ? `${c.name || c.countryCode} (${c.countryCode})`
+                          : (c.name || "—");
+                      const provs = Array.isArray(c.provinces) ? c.provinces : [];
+                      return (
+                        <BlockStack key={idx} gap="050">
+                          <Text fontWeight="semibold">{label}</Text>
+                          {provs.length > 0 && (
+                            <Text tone="subdued" variant="bodySm">
+                              {provs.map((p) => p.code && p.name ? `${p.name} (${p.code})` : (p.name || p.code)).join(", ")}
+                            </Text>
+                          )}
+                        </BlockStack>
+                      );
+                    })}
+                  </BlockStack>
+                )}
+              </BlockStack>
+
+              {!viewingSummary.isRange &&
+                Array.isArray(viewingSummary.parsedRules.overrides) &&
+                viewingSummary.parsedRules.overrides.length > 0 && (
+                  <BlockStack gap="200">
+                    <Text variant="headingSm" as="h3">
+                      Per-destination rate overrides
+                    </Text>
+                    <BlockStack gap="100">
+                      {viewingSummary.parsedRules.overrides.map((o, idx) => (
+                        <InlineStack key={idx} gap="200">
+                          <Text>
+                            {o.countryCode}
+                            {o.province ? ` · ${o.province}` : ""}
+                          </Text>
+                          <Text fontWeight="semibold">
+                            {o.rate} {viewingSummary.currency}
+                          </Text>
+                        </InlineStack>
+                      ))}
+                    </BlockStack>
+                  </BlockStack>
+                )}
+            </BlockStack>
+          </Modal.Section>
+        )}
+      </Modal>
 
       {/* ── Inline edit modal ─────────────────────────────────────────────
           Lets the vendor tweak the rate / bands / currency / name of one

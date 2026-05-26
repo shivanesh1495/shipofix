@@ -1746,6 +1746,245 @@ body,
   padding-top: 8px;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════
+   PAGE TAB BAR — tabs + help button aligned on one row
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.page-tabbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.page-tabbar-tabs {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.page-tab-caption {
+  padding: 0 4px;
+  max-width: 72ch;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   RULES OVERVIEW — Stats strip
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.ro-stats {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 16px 22px;
+  background: var(--surface-glass);
+  backdrop-filter: saturate(140%) blur(6px);
+  -webkit-backdrop-filter: saturate(140%) blur(6px);
+  border: 1px solid var(--border-hairline);
+  border-radius: 16px;
+  box-shadow: var(--elev-1);
+}
+
+.ro-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 84px;
+}
+
+.ro-stat-value {
+  font-size: 1.4rem;
+  font-weight: 800;
+  letter-spacing: var(--tracking-tight);
+  color: var(--text-primary);
+  line-height: 1.1;
+  background: linear-gradient(135deg, #0B0E2A 0%, var(--accent-700) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.ro-stat-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.ro-stat-divider {
+  width: 1px;
+  align-self: stretch;
+  background: var(--border-hairline);
+}
+
+.ro-stat-spacer { flex: 1; }
+
+.ro-stat-meta {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.ro-stat-meta b {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   RULES OVERVIEW — Toolbar
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.ro-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border-hairline);
+}
+
+.ro-toolbar-filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ro-search {
+  min-width: 280px;
+  flex: 1 1 280px;
+  max-width: 420px;
+}
+
+.ro-select { min-width: 200px; }
+.ro-select--narrow { min-width: 160px; }
+
+.ro-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* Subtle separator between filters and actions on wide screens */
+@media (min-width: 1100px) {
+  .ro-toolbar-actions {
+    padding-left: 16px;
+    border-left: 1px solid var(--border-hairline);
+  }
+}
+
+/* Select-mode context bar */
+.ro-selectbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 22px;
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--accent-500) 5%, white) 0%,
+    color-mix(in srgb, var(--accent-500) 1%, white) 100%);
+  border-bottom: 1px solid var(--border-hairline);
+}
+
+.ro-link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--accent-700);
+  text-decoration: none;
+  transition: color var(--duration-fast) var(--ease-out);
+}
+
+.ro-link-btn:hover {
+  color: var(--accent-900);
+  text-decoration: underline;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   RULES OVERVIEW — Table polish
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.ro-table .Polaris-DataTable {
+  border-radius: 0 !important;
+}
+
+.ro-table .Polaris-DataTable__Cell {
+  padding: 14px 18px !important;
+  vertical-align: middle !important;
+  border-bottom: 1px solid var(--border-hairline) !important;
+}
+
+.ro-table .Polaris-DataTable__Cell--header {
+  font-size: 0.72rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.07em !important;
+  text-transform: uppercase !important;
+  color: var(--text-muted) !important;
+  background: var(--surface-sunken) !important;
+  border-bottom: 1px solid var(--border-soft) !important;
+}
+
+.ro-table .Polaris-DataTable__TableRow:hover .Polaris-DataTable__Cell {
+  background: color-mix(in srgb, var(--accent-500) 3%, var(--surface)) !important;
+}
+
+.ro-table .Polaris-DataTable__TableRow:last-child .Polaris-DataTable__Cell {
+  border-bottom: none !important;
+}
+
+.ro-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   RULES OVERVIEW — Empty state
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.ro-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 72px 24px;
+  text-align: center;
+}
+
+.ro-empty-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--accent-50) 0%, var(--white) 100%);
+  border: 1px solid color-mix(in srgb, var(--accent-500) 18%, transparent);
+  color: var(--accent-700);
+  margin-bottom: 4px;
+  box-shadow:
+    0 0 0 6px color-mix(in srgb, var(--accent-500) 5%, transparent),
+    var(--elev-2);
+}
+
+.ro-empty-icon .Polaris-Icon {
+  width: 28px;
+  height: 28px;
+}
+
+.ro-empty-actions {
+  margin-top: 10px;
+}
+
 /* ── Premium brand strip (top of page) ────────────────────────────────── */
 
 .brand-strip {

@@ -28,7 +28,14 @@ import {
   Text,
   TextField,
 } from "@shopify/polaris";
-import { DeleteIcon, SearchIcon } from "@shopify/polaris-icons";
+import {
+  DeleteIcon,
+  EditIcon,
+  PackageIcon,
+  PlusIcon,
+  SearchIcon,
+  ViewIcon,
+} from "@shopify/polaris-icons";
 import { useMemo, useState } from "react";
 
 const LOGIC_TYPES = [
@@ -205,15 +212,49 @@ export default function RulesOverview({
     setSelectedIds(new Set());
   }
 
+  /* Stat summary numbers for the strip above the table */
+  const stats = useMemo(() => {
+    const total = rules.length;
+    const bulk = rules.filter((r) => r.source === "bulk").length;
+    const zone = total - bulk;
+    return { total, bulk, zone };
+  }, [rules]);
+
   return (
     <Box paddingBlockEnd="500">
       <BlockStack gap="400">
+        {/* Stats summary strip */}
+        {rules.length > 0 && (
+          <div className="ro-stats">
+            <div className="ro-stat">
+              <span className="ro-stat-value">{stats.total}</span>
+              <span className="ro-stat-label">
+                Total rule{stats.total === 1 ? "" : "s"}
+              </span>
+            </div>
+            <div className="ro-stat-divider" />
+            <div className="ro-stat">
+              <span className="ro-stat-value">{stats.zone}</span>
+              <span className="ro-stat-label">Zone-wise</span>
+            </div>
+            <div className="ro-stat-divider" />
+            <div className="ro-stat">
+              <span className="ro-stat-value">{stats.bulk}</span>
+              <span className="ro-stat-label">From Excel</span>
+            </div>
+            <div className="ro-stat-spacer" />
+            <div className="ro-stat-meta">
+              Showing <b>{visibleRules.length}</b> of <b>{stats.total}</b>
+            </div>
+          </div>
+        )}
+
         {/* Filters + table */}
-        <Card>
-          <BlockStack gap="400">
-            {/* Header strip — search/filter/sort + Add new zone button */}
-            <InlineStack gap="300" align="start" wrap>
-              <Box minWidth="280px">
+        <Card padding="0">
+          {/* Toolbar */}
+          <div className="ro-toolbar">
+            <div className="ro-toolbar-filters">
+              <div className="ro-search">
                 <TextField
                   label="Search rules"
                   labelHidden
@@ -222,11 +263,13 @@ export default function RulesOverview({
                   prefix={<Icon source={SearchIcon} />}
                   placeholder="Search by name, country, or zone…"
                   autoComplete="off"
+                  clearButton
+                  onClearButtonClick={() => setSearchQuery("")}
                 />
-              </Box>
-              <Box minWidth="200px">
+              </div>
+              <div className="ro-select">
                 <Select
-                  label="Pricing model filter"
+                  label="Pricing model"
                   labelHidden
                   options={[
                     { label: "All pricing models", value: "ALL" },
@@ -235,8 +278,8 @@ export default function RulesOverview({
                   value={filterType}
                   onChange={setFilterType}
                 />
-              </Box>
-              <Box minWidth="160px">
+              </div>
+              <div className="ro-select ro-select--narrow">
                 <Select
                   label="Sort"
                   labelHidden
@@ -247,120 +290,175 @@ export default function RulesOverview({
                   value={sortOrder}
                   onChange={setSortOrder}
                 />
-              </Box>
-              <div style={{ marginLeft: "auto", display: "flex", gap: "8px", alignItems: "center" }}>
-                {isSelectMode ? (
-                  <>
-                    <Button onClick={exitSelectMode}>Cancel</Button>
+              </div>
+            </div>
+
+            <div className="ro-toolbar-actions">
+              {isSelectMode ? (
+                <>
+                  <Button onClick={exitSelectMode} disabled={isBulkDeleting}>
+                    Cancel
+                  </Button>
+                  <Button
+                    tone="critical"
+                    variant="primary"
+                    icon={DeleteIcon}
+                    disabled={selectedIds.size === 0 || isDeleting || isBulkDeleting}
+                    loading={isBulkDeleting}
+                    onClick={() => setConfirmBulkDelete(true)}
+                  >
+                    Delete selected ({selectedIds.size})
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button
+                    icon={DeleteIcon}
+                    onClick={() => setIsSelectMode(true)}
+                    disabled={rules.length === 0}
+                  >
+                    Multiple delete
+                  </Button>
+                  <Button variant="primary" icon={PlusIcon} onClick={onAddZone}>
+                    Add new zone
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Bulk-select context banner */}
+          {isSelectMode && (
+            <div className="ro-selectbar">
+              <Text variant="bodySm" tone="subdued">
+                {selectedIds.size === 0
+                  ? "Select one or more rules to delete."
+                  : `${selectedIds.size} selected${selectedIds.size === visibleRules.length ? " (all)" : ""}`}
+              </Text>
+              {selectedIds.size > 0 && (
+                <button
+                  type="button"
+                  className="ro-link-btn"
+                  onClick={() => setSelectedIds(new Set())}
+                >
+                  Clear selection
+                </button>
+              )}
+            </div>
+          )}
+
+          {visibleRules.length > 0 ? (
+            <div className="ro-table">
+              <DataTable
+                columnContentTypes={isSelectMode
+                  ? ["text", "text", "text", "text", "text"]
+                  : ["text", "text", "text", "text"]}
+                headings={[
+                  ...(isSelectMode ? [
+                    <Checkbox
+                      key="select-all"
+                      label="Select all"
+                      labelHidden
+                      checked={isAllSelected}
+                      indeterminate={isIndeterminate}
+                      onChange={toggleSelectAll}
+                    />,
+                  ] : []),
+                  "Name",
+                  "Coverage",
+                  "Pricing model",
+                  <div key="actions-h" style={{ textAlign: "right" }}>Actions</div>,
+                ]}
+                rows={visibleRules.map((r) => [
+                  ...(isSelectMode ? [
+                    <Checkbox
+                      key={`sel-${r.id}`}
+                      label={`Select ${r.name}`}
+                      labelHidden
+                      checked={selectedIds.has(r.id)}
+                      onChange={() => toggleSelect(r.id)}
+                    />,
+                  ] : []),
+                  <Text key={`n-${r.id}`} fontWeight="semibold">
+                    {r.name}
+                  </Text>,
+                  <Text key={`c-${r.id}`} tone="subdued">
+                    {summarizeCoverage(r)}
+                  </Text>,
+                  <InlineStack key={`l-${r.id}`} gap="150" blockAlign="center">
+                    <Badge tone="info">
+                      {LOGIC_SHORT_NAME[r.logicType] || r.logicType}
+                    </Badge>
+                    {r.source === "bulk" && (
+                      <Badge tone="attention">Excel</Badge>
+                    )}
+                  </InlineStack>,
+                  <div key={`a-${r.id}`} className="ro-row-actions">
                     <Button
+                      size="slim"
+                      icon={ViewIcon}
+                      onClick={() => setViewingRuleId(r.id)}
+                      accessibilityLabel={`View rule ${r.name}`}
+                    >
+                      View
+                    </Button>
+                    <Button
+                      size="slim"
+                      icon={EditIcon}
+                      onClick={() => onEditRule?.(r)}
+                      accessibilityLabel={`Edit rule ${r.name}`}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      size="slim"
                       tone="critical"
                       icon={DeleteIcon}
-                      disabled={selectedIds.size === 0 || isDeleting || isBulkDeleting}
-                      loading={isBulkDeleting}
-                      onClick={() => setConfirmBulkDelete(true)}
+                      accessibilityLabel={`Delete rule ${r.name}`}
+                      onClick={() => setConfirmDeleteId(r.id)}
+                      disabled={isDeleting || isBulkDeleting}
                     >
-                      Delete selected ({selectedIds.size})
+                      Delete
                     </Button>
-                  </>
-                ) : (
-                  <>
-                    <Button icon={DeleteIcon} onClick={() => setIsSelectMode(true)}>
-                      Multiple delete
-                    </Button>
-                    <Button variant="primary" onClick={onAddZone}>
-                      + Add new zone
-                    </Button>
-                  </>
-                )}
+                  </div>,
+                ])}
+              />
+            </div>
+          ) : (
+            <div className="ro-empty">
+              <div className="ro-empty-icon">
+                <Icon source={PackageIcon} />
               </div>
-            </InlineStack>
-
-            <DataTable
-              columnContentTypes={isSelectMode
-                ? ["text", "text", "text", "text", "text"]
-                : ["text", "text", "text", "text"]}
-              headings={[
-                ...(isSelectMode ? [
-                  <Checkbox
-                    key="select-all"
-                    label="Select all"
-                    labelHidden
-                    checked={isAllSelected}
-                    indeterminate={isIndeterminate}
-                    onChange={toggleSelectAll}
-                  />,
-                ] : []),
-                "Name",
-                "Coverage",
-                "Pricing model",
-                "Actions",
-              ]}
-              rows={visibleRules.map((r) => [
-                ...(isSelectMode ? [
-                  <Checkbox
-                    key={`sel-${r.id}`}
-                    label={`Select ${r.name}`}
-                    labelHidden
-                    checked={selectedIds.has(r.id)}
-                    onChange={() => toggleSelect(r.id)}
-                  />,
-                ] : []),
-                <Text key={`n-${r.id}`} fontWeight="semibold">
-                  {r.name}
-                </Text>,
-                summarizeCoverage(r),
-                <InlineStack key={`l-${r.id}`} gap="100" blockAlign="center">
-                  <Badge tone="info">
-                    {LOGIC_SHORT_NAME[r.logicType] || r.logicType}
-                  </Badge>
-                  {r.source === "bulk" && (
-                    <Badge tone="attention">Excel</Badge>
-                  )}
-                </InlineStack>,
-                <InlineStack key={`a-${r.id}`} gap="200" wrap={false}>
-                  <Button
-                    size="micro"
-                    onClick={() => setViewingRuleId(r.id)}
-                  >
-                    View
+              <Text variant="headingMd" as="h3">
+                {rules.length === 0
+                  ? "No shipping rules yet"
+                  : "No rules match your filters"}
+              </Text>
+              <Text tone="subdued" variant="bodyMd">
+                {rules.length === 0
+                  ? "Create your first zone-wise rule or upload an Excel template from the Bulk edit tab."
+                  : "Try clearing the search or pricing-model filter to see more results."}
+              </Text>
+              {rules.length === 0 ? (
+                <div className="ro-empty-actions">
+                  <Button variant="primary" icon={PlusIcon} onClick={onAddZone}>
+                    Add new zone
                   </Button>
+                </div>
+              ) : (
+                <div className="ro-empty-actions">
                   <Button
-                    size="micro"
-                    variant="primary"
-                    tone="success"
-                    onClick={() => onEditRule?.(r)}
+                    onClick={() => {
+                      setSearchQuery("");
+                      setFilterType("ALL");
+                    }}
                   >
-                    Edit
+                    Reset filters
                   </Button>
-                  <Button
-                    size="micro"
-                    tone="critical"
-                    icon={DeleteIcon}
-                    accessibilityLabel={`Delete rule ${r.name}`}
-                    onClick={() => setConfirmDeleteId(r.id)}
-                    disabled={isDeleting || isBulkDeleting}
-                  >
-                    Delete
-                  </Button>
-                </InlineStack>,
-              ])}
-            />
-
-            {visibleRules.length === 0 && (
-              <div
-                style={{
-                  textAlign: "center",
-                  padding: "40px 20px",
-                }}
-              >
-                <Text variant="bodyMd" tone="subdued">
-                  {rules.length === 0
-                    ? "No shipping rules yet — click “+ Add new zone” to create your first rule, or upload an Excel template from the Bulk edit tab."
-                    : "No rules match your filters."}
-                </Text>
-              </div>
-            )}
-          </BlockStack>
+                </div>
+              )}
+            </div>
+          )}
         </Card>
       </BlockStack>
 

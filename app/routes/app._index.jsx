@@ -716,31 +716,30 @@ export default function ShippingDashboard() {
           )}
 
           {/* ── Main content ── */}
-          <BlockStack gap="0">
+          <BlockStack gap="400">
             {/* Navbar: tab pills on the left, Help guide on the right */}
-            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-              <Tabs tabs={tabs} selected={selectedTab} onSelect={setSelectedTab} />
-              {/* Hidden on Bulk Edit — that tab has its own inline docs buttons */}
+            <div className="page-tabbar">
+              <div className="page-tabbar-tabs">
+                <Tabs tabs={tabs} selected={selectedTab} onSelect={setSelectedTab} />
+              </div>
               {selectedTab !== 1 && (
-                <div style={{ marginLeft: "auto" }}>
-                  <Button
-                    icon={InfoIcon}
-                    onClick={() => shopify.modal.show("docs-modal")}
-                    accessibilityLabel="Open help guide"
-                  >
-                    Help guide
-                  </Button>
-                </div>
+                <Button
+                  icon={InfoIcon}
+                  onClick={() => shopify.modal.show("docs-modal")}
+                  accessibilityLabel="Open help guide"
+                >
+                  Help guide
+                </Button>
               )}
             </div>
 
-            <Box paddingBlockStart="300" paddingInlineStart="400" paddingInlineEnd="400">
+            <div className="page-tab-caption">
               <Text tone="subdued" variant="bodySm">
                 {tabDescriptions[selectedTab]}
               </Text>
-            </Box>
+            </div>
 
-            <Box paddingBlockStart="400">
+            <Box>
               {selectedTab === 0 ? (
                 <RulesOverview
                   rules={rules}

@@ -548,15 +548,6 @@ export default function RulesOverview({
     editFetcher.submit(body, { method: "POST", action: "/app/bulk-edit" });
 
     closeEdit();
-
-    /* GUARANTEED visual refresh — the optimistic merge above SHOULD update
-       the table instantly, but if anything in the React/Polaris/iframe
-       stack swallows the update, this fallback ensures the user sees the
-       new value within a second. Hard reload of the iframe pulls fresh
-       loader data; the DB write has already committed by then. */
-    if (typeof window !== "undefined") {
-      setTimeout(() => window.location.reload(), 800);
-    }
   }, [editingRule, editingIsRange, editName, editCurrency, editRate, editBands, editFetcher, onBulkRuleEdited, closeEdit]);
 
   /* Track the data ref we've already reacted to so a stale {success: true}

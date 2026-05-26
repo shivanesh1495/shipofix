@@ -19,6 +19,7 @@ import {
   Box,
   Button,
   Card,
+  Checkbox,
   DataTable,
   Icon,
   InlineStack,
@@ -125,11 +126,16 @@ export default function RulesOverview({
   setSortOrder,
   onEditRule,
   onDeleteRule,
+  onBulkDelete,
   onAddZone,
   isDeleting = false,
+  isBulkDeleting = false,
 }) {
   const [viewingRuleId, setViewingRuleId] = useState(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [isSelectMode, setIsSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
   /* Filter + sort + search the rules into the order shown in the table.
      Search matches against name + coverage summary so vendors can hunt
@@ -172,6 +178,32 @@ export default function RulesOverview({
     () => (viewingRule ? parseViewModel(viewingRule) : null),
     [viewingRule],
   );
+
+  const isAllSelected =
+    visibleRules.length > 0 && visibleRules.every((r) => selectedIds.has(r.id));
+  const isIndeterminate = selectedIds.size > 0 && !isAllSelected;
+
+  function toggleSelect(id) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    if (isAllSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(visibleRules.map((r) => r.id)));
+    }
+  }
+
+  function exitSelectMode() {
+    setIsSelectMode(false);
+    setSelectedIds(new Set());
+  }
 
   return (
     <Box paddingBlockEnd="500">
@@ -216,17 +248,63 @@ export default function RulesOverview({
                   onChange={setSortOrder}
                 />
               </Box>
-              <div style={{ marginLeft: "auto" }}>
-                <Button variant="primary" onClick={onAddZone}>
-                  + Add new zone
-                </Button>
+              <div style={{ marginLeft: "auto", display: "flex", gap: "8px", alignItems: "center" }}>
+                {isSelectMode ? (
+                  <>
+                    <Button onClick={exitSelectMode}>Cancel</Button>
+                    <Button
+                      tone="critical"
+                      icon={DeleteIcon}
+                      disabled={selectedIds.size === 0 || isDeleting || isBulkDeleting}
+                      loading={isBulkDeleting}
+                      onClick={() => setConfirmBulkDelete(true)}
+                    >
+                      Delete selected ({selectedIds.size})
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button icon={DeleteIcon} onClick={() => setIsSelectMode(true)}>
+                      Multiple delete
+                    </Button>
+                    <Button variant="primary" onClick={onAddZone}>
+                      + Add new zone
+                    </Button>
+                  </>
+                )}
               </div>
             </InlineStack>
 
             <DataTable
-              columnContentTypes={["text", "text", "text", "text"]}
-              headings={["Name", "Coverage", "Pricing model", "Actions"]}
+              columnContentTypes={isSelectMode
+                ? ["text", "text", "text", "text", "text"]
+                : ["text", "text", "text", "text"]}
+              headings={[
+                ...(isSelectMode ? [
+                  <Checkbox
+                    key="select-all"
+                    label="Select all"
+                    labelHidden
+                    checked={isAllSelected}
+                    indeterminate={isIndeterminate}
+                    onChange={toggleSelectAll}
+                  />,
+                ] : []),
+                "Name",
+                "Coverage",
+                "Pricing model",
+                "Actions",
+              ]}
               rows={visibleRules.map((r) => [
+                ...(isSelectMode ? [
+                  <Checkbox
+                    key={`sel-${r.id}`}
+                    label={`Select ${r.name}`}
+                    labelHidden
+                    checked={selectedIds.has(r.id)}
+                    onChange={() => toggleSelect(r.id)}
+                  />,
+                ] : []),
                 <Text key={`n-${r.id}`} fontWeight="semibold">
                   {r.name}
                 </Text>,
@@ -260,7 +338,7 @@ export default function RulesOverview({
                     icon={DeleteIcon}
                     accessibilityLabel={`Delete rule ${r.name}`}
                     onClick={() => setConfirmDeleteId(r.id)}
-                    disabled={isDeleting}
+                    disabled={isDeleting || isBulkDeleting}
                   >
                     Delete
                   </Button>
@@ -477,6 +555,41 @@ export default function RulesOverview({
               </Text>
             )}
           </BlockStack>
+        </Modal.Section>
+      </Modal>
+
+      {/* ── Bulk-delete confirmation modal ───────────────────────────── */}
+      <Modal
+        open={confirmBulkDelete}
+        onClose={() => setConfirmBulkDelete(false)}
+        title={`Delete ${selectedIds.size} rule${selectedIds.size === 1 ? "" : "s"}?`}
+        primaryAction={{
+          content: `Delete ${selectedIds.size} rule${selectedIds.size === 1 ? "" : "s"}`,
+          destructive: true,
+          loading: isBulkDeleting,
+          disabled: isBulkDeleting,
+          onAction: () => {
+            const ids = [...selectedIds];
+            setConfirmBulkDelete(false);
+            setSelectedIds(new Set());
+            onBulkDelete?.(ids);
+          },
+        }}
+        secondaryActions={[
+          {
+            content: "Cancel",
+            onAction: () => setConfirmBulkDelete(false),
+            disabled: isBulkDeleting,
+          },
+        ]}
+      >
+        <Modal.Section>
+          <Text>
+            This permanently removes {selectedIds.size} rule
+            {selectedIds.size === 1 ? "" : "s"}. Customers shipping to the
+            affected countries will fall back to other matching rules or
+            Shopify&apos;s default rates.
+          </Text>
         </Modal.Section>
       </Modal>
     </Box>

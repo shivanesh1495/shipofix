@@ -280,6 +280,40 @@ export const action = async ({ request }) => {
     return { success: true, message: `"${rule.name}" deleted.` };
   }
 
+  /* ── Bulk-delete multiple rules ── */
+  if (intent === "delete_bulk") {
+    const ids = JSON.parse(formData.get("ids") || "[]");
+    if (ids.length === 0) return { success: false, error: "No rules selected." };
+
+    const dbRules = await prisma.zoneRule.findMany({
+      where: { id: { in: ids }, shop: shopDomain },
+    });
+
+    const shopifyGids = dbRules
+      .filter((r) => r.source === "shopify" && r.deliveryZoneGid)
+      .map((r) => r.deliveryZoneGid);
+
+    if (shopifyGids.length > 0) {
+      const profileId = formData.get("profileId");
+      if (profileId) {
+        const res = await admin.graphql(MUTATION_DELIVERY_PROFILE_UPDATE, {
+          variables: { profileId, profile: { zonesToDelete: shopifyGids } },
+        });
+        const resJson = await res.json();
+        const errors = resJson?.data?.deliveryProfileUpdate?.userErrors || [];
+        if (errors.length > 0) {
+          return { success: false, error: errors.map((e) => e.message).join(", ") };
+        }
+      }
+    }
+
+    await prisma.zoneRule.deleteMany({ where: { id: { in: ids } } });
+    return {
+      success: true,
+      message: `${dbRules.length} rule${dbRules.length === 1 ? "" : "s"} deleted.`,
+    };
+  }
+
   /* ── Cleanup stale carrier services left behind by previous installs ── */
   if (intent === "cleanup_carrier_services") {
     const ids = JSON.parse(formData.get("ids") || "[]");
@@ -593,6 +627,18 @@ export default function ShippingDashboard() {
     [fetcher, profileId, locationGroupId],
   );
 
+  const handleBulkDeleteRules = useCallback(
+    (ids) => {
+      const body = new FormData();
+      body.set("intent", "delete_bulk");
+      body.set("ids", JSON.stringify(ids));
+      body.set("profileId", profileId);
+      body.set("locationGroupId", locationGroupId);
+      fetcher.submit(body, { method: "POST" });
+    },
+    [fetcher, profileId, locationGroupId],
+  );
+
   const tabs = [
     {
       id: "overview",
@@ -706,10 +752,15 @@ export default function ShippingDashboard() {
                   setSortOrder={setSortOrder}
                   onEditRule={handleEditRule}
                   onDeleteRule={handleDeleteRule}
+                  onBulkDelete={handleBulkDeleteRules}
                   onAddZone={openCreateModal}
                   isDeleting={
                     fetcher.state === "submitting" &&
                     fetcher.formData?.get("intent") === "delete_rule"
+                  }
+                  isBulkDeleting={
+                    fetcher.state === "submitting" &&
+                    fetcher.formData?.get("intent") === "delete_bulk"
                   }
                 />
               ) : (

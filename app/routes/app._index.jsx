@@ -819,7 +819,7 @@ export default function ShippingDashboard() {
             <p>
               A plain-English walk-through of how Shipofix decides what to
               charge for shipping. Skim the section you need, or read it
-              top-to-bottom the first time.
+              top-to-bottom the first time you set things up.
             </p>
           </div>
 
@@ -828,7 +828,9 @@ export default function ShippingDashboard() {
             <div className="shipofix-docs-toc-links">
               <a href="#docs-quickstart">Quick start</a>
               <a href="#docs-zones">What is a zone?</a>
+              <a href="#docs-tour">All rates · interface tour</a>
               <a href="#docs-models">The 6 pricing models</a>
+              <a href="#docs-delete">Editing &amp; deleting rules</a>
               <a href="#docs-bulk">Bulk edit (Excel)</a>
               <a href="#docs-currency">Currency</a>
               <a href="#docs-connection">Checkout connection</a>
@@ -841,14 +843,14 @@ export default function ShippingDashboard() {
             <h2>Quick start · 3 steps</h2>
             <ol className="shipofix-docs-steps">
               <li>
-                <b>Click &ldquo;+ Add new zone&rdquo;</b> on the All rates
-                tab. Give the zone a name, tick the countries (and provinces,
-                if needed), and click <i>Create</i>.
+                <b>Click &ldquo;Add new zone&rdquo;</b> at the top-right of
+                the All rates table. Give the zone a name, tick the countries
+                (and provinces, if needed), and click <i>Create</i>.
               </li>
               <li>
-                <b>Click Edit</b> on the row that appeared. Pick a pricing
-                model from the dropdown — flat rate, weight tiers, percent
-                of cart, and so on. Type your price.
+                <b>Click Edit</b> on the row that just appeared. Pick a
+                pricing model — flat rate, weight tiers, percent of cart, and
+                so on — then type your price.
               </li>
               <li>
                 <b>Click &ldquo;Save shipping rate&rdquo;.</b> Customers see
@@ -856,7 +858,7 @@ export default function ShippingDashboard() {
               </li>
             </ol>
             <div className="shipofix-docs-tip">
-              <b>Tip:</b> Want to edit lots of rules at once? Use the{" "}
+              <b>Tip:</b> Need to edit lots of rules at once? Use the{" "}
               <i>Bulk edit (Excel)</i> tab — see below.
             </div>
           </section>
@@ -873,9 +875,8 @@ export default function ShippingDashboard() {
             </p>
             <ul className="shipofix-docs-bullets">
               <li>
-                <b>Add a new zone</b> — click the &ldquo;+ Add new zone&rdquo;
-                button at the top right of the All rates table and tick the
-                countries.
+                <b>Add a new zone</b> — click <i>Add new zone</i> at the top
+                right of the All rates table and tick the countries.
               </li>
               <li>
                 <b>Change countries</b> — open a rule with Edit, then click{" "}
@@ -890,6 +891,43 @@ export default function ShippingDashboard() {
                 <b>Use Shopify&apos;s own rates instead</b> — change the
                 pricing model dropdown to &ldquo;Shopify default&rdquo;. The
                 rule stays in place, but Shopify decides the price.
+              </li>
+            </ul>
+          </section>
+
+          {/* ── All rates interface tour ── */}
+          <section id="docs-tour" className="shipofix-docs-section">
+            <h2>All rates · interface tour</h2>
+            <p>
+              The <i>All rates</i> tab is where you spend most of your time.
+              Here&apos;s what each piece does:
+            </p>
+            <ul className="shipofix-docs-bullets">
+              <li>
+                <b>Stats strip</b> — the bar at the top shows your total
+                rule count, how many are zone-wise vs. uploaded from Excel,
+                and how many match your current filters.
+              </li>
+              <li>
+                <b>Search</b> — type any rule name, country, or zone name.
+                The table filters as you type.
+              </li>
+              <li>
+                <b>Pricing-model filter</b> — narrow the table to only
+                flat-rate rules, weight-tier rules, etc.
+              </li>
+              <li>
+                <b>Sort</b> — flip between A → Z and Z → A by rule name.
+              </li>
+              <li>
+                <b>Row actions</b> — every row has <i>View</i> (read-only
+                details), <i>Edit</i> (change the price or coverage), and{" "}
+                <i>Delete</i>.
+              </li>
+              <li>
+                <b>Multiple delete</b> — click <i>Multiple delete</i> to
+                reveal checkboxes, tick the rules you want gone, then{" "}
+                <i>Delete selected</i>.
               </li>
             </ul>
           </section>
@@ -954,29 +992,83 @@ export default function ShippingDashboard() {
             </div>
           </section>
 
+          {/* ── Editing & deleting rules ── */}
+          <section id="docs-delete" className="shipofix-docs-section">
+            <h2>Editing &amp; deleting rules</h2>
+            <p>
+              Every rule has the same three actions on the right side of its
+              row: <b>View</b>, <b>Edit</b>, and <b>Delete</b>. Use them as
+              follows:
+            </p>
+            <ul className="shipofix-docs-bullets">
+              <li>
+                <b>View</b> — opens a read-only summary of the rule&apos;s
+                pricing model, rate, and country/province coverage. Nothing
+                you do here can save changes.
+              </li>
+              <li>
+                <b>Edit</b> — opens the editor. Change the price, switch
+                pricing models, tweak bands, or click{" "}
+                <i>Change countries</i> to adjust coverage. Click{" "}
+                <i>Save shipping rate</i> when you&apos;re done.
+              </li>
+              <li>
+                <b>Delete</b> — removes the rule after a confirmation prompt.
+                For zone-wise rules, the underlying Shopify delivery zone is
+                also removed; bulk (Excel) rules are removed from the stored
+                spreadsheet too.
+              </li>
+            </ul>
+            <p>
+              <b>To clean up many rules at once</b>, click{" "}
+              <i>Multiple delete</i> at the top of the table. Checkboxes
+              appear on every row — tick the rules you want gone (or use
+              the header checkbox to select all visible rules) and click{" "}
+              <i>Delete selected (N)</i>. A confirmation dialog will list how
+              many rules are about to be removed.
+            </p>
+            <div className="shipofix-docs-tip">
+              <b>Heads up:</b> Deletes are permanent. For Excel-uploaded
+              rules you can re-upload the file later to bring them back;
+              zone-wise rules have to be re-created by hand.
+            </div>
+          </section>
+
           {/* ── Bulk edit ── */}
           <section id="docs-bulk" className="shipofix-docs-section">
             <h2>Bulk edit (Excel)</h2>
             <p>
               If you have lots of rules, editing one at a time is slow. The{" "}
-              <i>Bulk edit (Excel)</i> tab lets you:
+              <i>Bulk edit (Excel)</i> tab lets you manage everything from a
+              single spreadsheet.
             </p>
             <ol className="shipofix-docs-steps">
-              <li>Download a spreadsheet with every country pre-filled.</li>
-              <li>Fill in the rule <b>Name</b>, <b>Pricing model</b>, <b>Currency</b> and <b>Price</b> on the rows you care about.</li>
-              <li>Upload the file. Shipofix replaces every previously-uploaded rule with what you uploaded.</li>
+              <li>
+                <b>Download the template</b> — click <i>Download .xlsx</i>{" "}
+                on Step 1. The workbook ships with four sheets:{" "}
+                <b>Bulk Edit</b> (coverage + logic), <b>Rate Bands</b> (slabs
+                for weight or order-value tiers), <b>All Regions</b> (read-only
+                reference), and <b>Instructions</b>.
+              </li>
+              <li>
+                <b>Fill in only the rows you need</b> — give each rule a{" "}
+                <b>Name</b>, tick at least one country/zone, pick a{" "}
+                <b>Pricing model</b>, and set a <b>Currency</b> and{" "}
+                <b>Price</b>. Rows sharing a Name merge into one rule whose
+                coverage is the union of their country/zone cells.
+              </li>
+              <li>
+                <b>Upload the file</b> — Shipofix replaces every
+                previously-uploaded rule with what you uploaded. Your
+                zone-wise rules (created via <i>Add new zone</i>) are never
+                touched.
+              </li>
             </ol>
             <div className="shipofix-docs-tip">
-              Excel-uploaded rules live alongside zone-wise rules — both show
-              up in the All rates table and both apply at checkout. Re-uploading
-              the file only touches rules that came from Excel; your
-              zone-wise rules are never overwritten.
+              Excel-uploaded rules live alongside zone-wise rules — both
+              appear in the All rates table (marked with an <b>Excel</b>{" "}
+              badge) and both apply at checkout.
             </div>
-            <p>
-              The Bulk edit tab has its own detailed walkthrough (button:{" "}
-              <i>View documentation</i>) with examples and a country / zone
-              code lookup.
-            </p>
           </section>
 
           {/* ── Currency ── */}
@@ -1014,7 +1106,7 @@ export default function ShippingDashboard() {
               <h3>Why is my weight number in kilograms, not grams?</h3>
               <p>
                 Shopify stores product weights in grams, but most stores think
-                in kg. We do the conversion for you, so type your bands in kg.
+                in kg. We do the conversion for you — type your bands in kg.
               </p>
             </div>
             <div className="shipofix-docs-faq">
@@ -1039,6 +1131,28 @@ export default function ShippingDashboard() {
                 Change the pricing-model dropdown to <b>Shopify default</b>.
                 Shipofix steps aside for that rule and Shopify quotes its own
                 rate.
+              </p>
+            </div>
+            <div className="shipofix-docs-faq">
+              <h3>Can I delete several rules in one go?</h3>
+              <p>
+                Yes — click <b>Multiple delete</b> at the top of the All
+                rates table, tick the rules you want to remove (or use the
+                header checkbox to select all visible rules), and click{" "}
+                <b>Delete selected</b>. You&apos;ll get a confirmation
+                prompt before anything is removed.
+              </p>
+            </div>
+            <div className="shipofix-docs-faq">
+              <h3>What&apos;s the difference between zone-wise and Excel rules?</h3>
+              <p>
+                <b>Zone-wise rules</b> are created one at a time with the{" "}
+                <i>Add new zone</i> button and own their underlying Shopify
+                delivery zone. <b>Excel rules</b> are created in bulk by
+                uploading a spreadsheet, marked with an <b>Excel</b> badge in
+                the table, and replaced wholesale when you re-upload the
+                file. Both kinds apply at checkout and can be edited
+                row-by-row.
               </p>
             </div>
           </section>

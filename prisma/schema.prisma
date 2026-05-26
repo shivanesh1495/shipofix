@@ -27,42 +27,17 @@ model Session {
   refreshTokenExpires DateTime?
 }
 
+/// Unified shipping rule store.
+///
+/// Zone-wise rules (one-by-one editing in the dashboard) use the real
+/// Shopify delivery-zone GID as `deliveryZoneGid`. Excel-imported rules
+/// use a synthetic identifier prefixed with `bulk:` (e.g. `bulk:express-au`).
+///
+/// Both kinds live side-by-side in this table — the carrier service
+/// matches incoming checkout requests against ALL rules by country
+/// coverage, irrespective of origin. Editing, viewing, and deleting from
+/// the Rules Overview tab works the same for both.
 model ZoneRule {
-  id              String   @id @default(cuid())
-  shop            String
-  deliveryZoneGid String   @unique
-  name            String
-  logicType       String   @default("STANDARD_TIER")
-  currency        String   @default("USD")
-  rulesJson       String   @default("{}")
-  countries       String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  @@unique([shop, deliveryZoneGid])
-  @@index([shop, updatedAt])
-}
-
-model AppSetting {
-  shop             String   @id
-  bulkEditEnabled  Boolean  @default(true)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-}
-
-model BulkEditUpload {
-  shop       String   @id
-  filename   String
-  size       Int
-  data       Bytes
-  uploadedAt DateTime @default(now())
-}
-
-/// Bulk-edit rules — parallel to ZoneRule but populated only via the Excel
-/// upload. The carrier service picks between ZoneRule and BulkEditRule based
-/// on AppSetting.bulkEditEnabled, so toggling the feature swaps which set is
-/// applied at checkout without losing the other.
-model BulkEditRule {
   id              String   @id @default(cuid())
   shop            String
   deliveryZoneGid String
@@ -71,9 +46,27 @@ model BulkEditRule {
   currency        String   @default("USD")
   rulesJson       String   @default("{}")
   countries       String?
+  /// "shopify" for zone-wise rules, "bulk" for Excel-imported rules.
+  /// Lets the UI / upload action distinguish the two without parsing GIDs.
+  source          String   @default("shopify")
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   @@unique([shop, deliveryZoneGid])
   @@index([shop, updatedAt])
+  @@index([shop, source])
+}
+
+model AppSetting {
+  shop      String   @id
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model BulkEditUpload {
+  shop       String   @id
+  filename   String
+  size       Int
+  data       Bytes
+  uploadedAt DateTime @default(now())
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useActionData, useFetcher, useLoaderData, useRevalidator } from "react-router";
 import {
   Banner,
@@ -22,10 +22,9 @@ import {
 } from "../lib/graphql.js";
 
 /* ── Components ── */
-import ZoneSidebar from "../components/ZoneSidebar";
-import LogicEditor from "../components/LogicEditor";
 import RulesOverview from "../components/RulesOverview";
 import ZoneModal from "../components/ZoneModal";
+import EditRuleModal from "../components/EditRuleModal";
 import BulkEdit from "../components/BulkEdit";
 
 /* ───────────────────────────── Loader ──────────────────────────────── */
@@ -48,15 +47,16 @@ export const loader = async ({ request }) => {
   const locationGroupId =
     generalProfile?.profileLocationGroups?.[0]?.locationGroup?.id || null;
 
-  // Deduplicate zones from all profiles, track method definitions
+  /* Deduplicate zones from all profiles, track method definitions so we can
+     auto-attach the carrier service to any newly-created zone that doesn't
+     yet have a method (without this Shopify never calls our endpoint). */
   const zoneMap = new Map();
-  const zonesWithoutMethods = []; // zones missing carrier service method
+  const zonesWithoutMethods = [];
   profiles.forEach(({ node: profile }) => {
     profile.profileLocationGroups.forEach((group) => {
       group.locationGroupZones.edges.forEach(({ node: zoneNode }) => {
         const z = zoneNode.zone;
-        const methodCount =
-          zoneNode.methodDefinitions?.edges?.length || 0;
+        const methodCount = zoneNode.methodDefinitions?.edges?.length || 0;
         if (!zoneMap.has(z.id)) {
           const countries = z.countries.map((c) => ({
             countryCode: c.code.countryCode,
@@ -72,9 +72,7 @@ export const loader = async ({ request }) => {
             isDomestic: countries.some((c) => c.countryCode === shopCountry),
             hasMethodDefinition: methodCount > 0,
           });
-          if (methodCount === 0) {
-            zonesWithoutMethods.push(z.id);
-          }
+          if (methodCount === 0) zonesWithoutMethods.push(z.id);
         }
       });
     });
@@ -86,17 +84,14 @@ export const loader = async ({ request }) => {
     try {
       const csQuery = await admin.graphql(QUERY_CARRIER_SERVICES);
       const csJson = await csQuery.json();
-      const services =
-        csJson?.data?.carrierServices?.edges?.map((e) => e.node) || [];
+      const services = csJson?.data?.carrierServices?.edges?.map((e) => e.node) || [];
       const activeService = services.find((s) => s.active);
       carrierServiceId = activeService?.id || services[0]?.id || null;
-      console.log(`[AUTO-FIX] Carrier service ID: ${carrierServiceId}, active: ${!!activeService}`);
     } catch (_e) {
       console.error("[AUTO-FIX] Failed to query carrier services:", _e);
     }
 
     if (carrierServiceId) {
-      // Fix each zone individually so one failure doesn't block others
       for (const zoneId of zonesWithoutMethods) {
         try {
           const fixRes = await admin.graphql(MUTATION_DELIVERY_PROFILE_UPDATE, {
@@ -128,10 +123,7 @@ export const loader = async ({ request }) => {
           });
           const fixJson = await fixRes.json();
           const fixErrors = fixJson?.data?.deliveryProfileUpdate?.userErrors || [];
-          if (fixErrors.length > 0) {
-            console.error(`[AUTO-FIX] Zone ${zoneId} errors:`, JSON.stringify(fixErrors));
-          } else {
-            console.log(`[AUTO-FIX] ✅ Attached carrier service to zone ${zoneId}`);
+          if (fixErrors.length === 0) {
             const z = zoneMap.get(zoneId);
             if (z) z.hasMethodDefinition = true;
           }
@@ -144,14 +136,15 @@ export const loader = async ({ request }) => {
 
   const uniqueZones = Array.from(zoneMap.values());
 
-  // Sync DB
-  const savedRules = await prisma.zoneRule.findMany({
-    where: { shop: shopDomain },
+  /* ── Sync zone-wise rules (source='shopify') with the live Shopify zone
+     list. We update the rule's name/countries when the underlying Shopify
+     zone changes, and clean up orphaned rules whose zone was deleted. ── */
+  const shopifyRules = await prisma.zoneRule.findMany({
+    where: { shop: shopDomain, source: "shopify" },
   });
-  const rulesByGid = new Map(savedRules.map((r) => [r.deliveryZoneGid, r]));
+  const rulesByGid = new Map(shopifyRules.map((r) => [r.deliveryZoneGid, r]));
   const activeZoneGids = new Set(uniqueZones.map((z) => z.id));
 
-  // Update metadata for existing zones
   const syncs = uniqueZones
     .map((z) => {
       const existing = rulesByGid.get(z.id);
@@ -169,8 +162,7 @@ export const loader = async ({ request }) => {
     })
     .filter(Boolean);
 
-  // Clean up orphaned rules (zones deleted from Shopify but still in DB)
-  const orphans = savedRules.filter((r) => !activeZoneGids.has(r.deliveryZoneGid));
+  const orphans = shopifyRules.filter((r) => !activeZoneGids.has(r.deliveryZoneGid));
   if (orphans.length > 0) {
     console.log(
       `Cleaning up ${orphans.length} orphaned zone rule(s): ${orphans.map((r) => `${r.name}(${r.deliveryZoneGid})`).join(", ")}`,
@@ -179,40 +171,46 @@ export const loader = async ({ request }) => {
       syncs.push(prisma.zoneRule.delete({ where: { id: r.id } })),
     );
   }
-
   if (syncs.length > 0) await prisma.$transaction(syncs);
 
-  /* Bulk-edit ruleset — separate storage, populated only by Excel upload.
-     Attached so the Rules Overview can show whichever set is active.
-     The `prisma.bulkEditRule` guard keeps the page alive when the Prisma
-     client hasn't been regenerated yet after the schema added the model. */
-  const bulkRules = prisma.bulkEditRule
-    ? await prisma.bulkEditRule.findMany({ where: { shop: shopDomain } })
-    : [];
-  const bulkRulesByGid = new Map(bulkRules.map((r) => [r.deliveryZoneGid, r]));
+  /* Auto-create placeholder rules for any Shopify zone that doesn't have a
+     ZoneRule yet — so a zone the vendor created via "Add new zone" shows up
+     in the All rates table even before they've picked a pricing model. */
+  const missingZones = uniqueZones.filter((z) => !rulesByGid.has(z.id));
+  if (missingZones.length > 0) {
+    for (const z of missingZones) {
+      try {
+        await prisma.zoneRule.create({
+          data: {
+            shop: shopDomain,
+            deliveryZoneGid: z.id,
+            name: z.name,
+            countries: JSON.stringify(z.countries),
+            logicType: "DEFAULT",
+            currency: "USD",
+            rulesJson: "{}",
+            source: "shopify",
+          },
+        });
+      } catch (_e) {
+        /* unique constraint failure means another request raced us — fine */
+      }
+    }
+  }
 
-  const combined = uniqueZones.map((z) => ({
-    ...z,
-    rule: rulesByGid.get(z.id) || null,
-    bulkRule: bulkRulesByGid.get(z.id) || null,
-  }));
-
-  /* App-level settings (single source of truth for app-managed features) */
-  const appSetting = await prisma.appSetting.findUnique({
+  /* Fresh read after sync — single source of truth for the UI. */
+  const allRules = await prisma.zoneRule.findMany({
     where: { shop: shopDomain },
+    orderBy: { updatedAt: "desc" },
   });
-  const bulkEditEnabled = appSetting ? appSetting.bulkEditEnabled : true;
 
   return {
-    zones: combined,
-    /* Bulk rules are independent of Shopify zones — Rules Overview renders
-       them directly in bulk mode (one rule = many country/province rows). */
-    bulkRules,
+    rules: allRules,
+    zones: uniqueZones,
     carrierStatus,
     shopCountry,
     profileId,
     locationGroupId,
-    bulkEditEnabled,
     shippingUrl: `https://${shopDomain}/admin/settings/shipping`,
   };
 };
@@ -225,56 +223,65 @@ export const action = async ({ request }) => {
   const formData = await request.formData();
   const intent = formData.get("intent");
 
-  /* ── Save Rule ── */
+  /* ── Save / update a rule (zone-wise OR bulk-source) ── */
   if (intent === "save_rule") {
-    const gid = formData.get("deliveryZoneGid");
+    const id = formData.get("id");
     const name = formData.get("name");
-    const countries = formData.get("countries");
     const logicType = formData.get("logicType");
     const rulesJson = formData.get("rulesJson");
     const currency = formData.get("currency") || "USD";
 
-    await prisma.zoneRule.upsert({
-      where: {
-        shop_deliveryZoneGid: { shop: shopDomain, deliveryZoneGid: gid },
-      },
-      update: { name, countries, logicType, rulesJson, currency },
-      create: {
-        shop: shopDomain,
-        deliveryZoneGid: gid,
-        name,
-        countries,
-        logicType,
-        rulesJson,
-        currency,
-      },
+    if (!id) return { success: false, error: "Missing rule id." };
+
+    const existing = await prisma.zoneRule.findFirst({
+      where: { id, shop: shopDomain },
+    });
+    if (!existing) return { success: false, error: "Rule not found." };
+
+    await prisma.zoneRule.update({
+      where: { id },
+      data: { name, logicType, rulesJson, currency },
     });
 
-    return { success: true, message: `Logic saved for ${name}` };
+    return { success: true, message: `"${name}" saved.` };
   }
 
-  /* ── Delete Rule ── */
+  /* ── Delete a rule ──
+     For zone-wise rules we delete BOTH the Shopify delivery zone AND the
+     ZoneRule row. For bulk rules we only delete the ZoneRule row (the
+     Shopify zones aren't owned by the bulk rule). */
   if (intent === "delete_rule") {
     const id = formData.get("id");
-    await prisma.zoneRule.delete({ where: { id } });
-    return { success: true, message: "Rule removed" };
-  }
+    if (!id) return { success: false, error: "Missing rule id." };
 
-  /* ── Toggle Bulk Edit (app setting) ── */
-  if (intent === "toggle_bulk_edit") {
-    const enabled = formData.get("enabled") === "true";
-    await prisma.appSetting.upsert({
-      where: { shop: shopDomain },
-      update: { bulkEditEnabled: enabled },
-      create: { shop: shopDomain, bulkEditEnabled: enabled },
+    const rule = await prisma.zoneRule.findFirst({
+      where: { id, shop: shopDomain },
     });
-    return {
-      success: true,
-      message: `Bulk Edit ${enabled ? "enabled" : "disabled"}.`,
-    };
+    if (!rule) return { success: false, error: "Rule not found." };
+
+    if (rule.source === "shopify") {
+      const profileId = formData.get("profileId");
+      const locationGroupId = formData.get("locationGroupId");
+      if (profileId && locationGroupId) {
+        const res = await admin.graphql(MUTATION_DELIVERY_PROFILE_UPDATE, {
+          variables: {
+            profileId,
+            profile: { zonesToDelete: [rule.deliveryZoneGid] },
+          },
+        });
+        const resJson = await res.json();
+        const errors = resJson?.data?.deliveryProfileUpdate?.userErrors || [];
+        if (errors.length > 0) {
+          return { success: false, error: errors.map((e) => e.message).join(", ") };
+        }
+      }
+    }
+
+    await prisma.zoneRule.delete({ where: { id } });
+    return { success: true, message: `"${rule.name}" deleted.` };
   }
 
-  /* ── Cleanup Carrier Services ── */
+  /* ── Cleanup stale carrier services left behind by previous installs ── */
   if (intent === "cleanup_carrier_services") {
     const ids = JSON.parse(formData.get("ids") || "[]");
     for (const id of ids) {
@@ -283,7 +290,7 @@ export const action = async ({ request }) => {
     return { success: true, message: `Cleaned up ${ids.length} duplicate(s).` };
   }
 
-  /* ── Create Zone ── */
+  /* ── Create a new Shopify delivery zone (+ pre-create the ZoneRule row) ── */
   if (intent === "create_zone") {
     const profileId = formData.get("profileId");
     const locationGroupId = formData.get("locationGroupId");
@@ -323,17 +330,13 @@ export const action = async ({ request }) => {
       console.error("Failed to query carrier services:", _e);
     }
 
-    /* Build zone input — attach carrier service method definition if available */
     const zoneInput = { name: zoneName, countries: countriesInput };
     if (carrierServiceId) {
       zoneInput.methodDefinitionsToCreate = [
         {
           name: "Custom Carrier Shipping",
           active: true,
-          participant: {
-            carrierServiceId,
-            adaptToNewServices: true,
-          },
+          participant: { carrierServiceId, adaptToNewServices: true },
         },
       ];
     }
@@ -358,13 +361,15 @@ export const action = async ({ request }) => {
       return { success: false, error: errors.map((e) => e.message).join(", ") };
     }
 
+    /* Placeholder ZoneRule is created on the NEXT loader run when we see the
+       new Shopify zone — we don't have its GID here yet. */
     return {
       success: true,
-      message: `Zone "${zoneName}" created successfully!`,
+      message: `Zone "${zoneName}" created. Pick a pricing model from the Edit button to set rates.`,
     };
   }
 
-  /* ── Update Zone ── */
+  /* ── Update a Shopify zone's countries (called from "Change countries") ── */
   if (intent === "update_zone") {
     const profileId = formData.get("profileId");
     const locationGroupId = formData.get("locationGroupId");
@@ -403,48 +408,10 @@ export const action = async ({ request }) => {
     const resJson = await res.json();
     const errors = resJson?.data?.deliveryProfileUpdate?.userErrors || [];
     if (errors.length > 0) {
-      console.error("SHOPIFY API ERRORS:", JSON.stringify(errors, null, 2));
       return { success: false, error: errors.map((e) => e.message).join(", ") };
     }
 
-    return {
-      success: true,
-      message: `Zone "${zoneName}" updated successfully!`,
-    };
-  }
-
-  /* ── Delete Zone ── */
-  if (intent === "delete_zone") {
-    const profileId = formData.get("profileId");
-    const locationGroupId = formData.get("locationGroupId");
-    const zoneId = formData.get("zoneId");
-
-    if (!profileId || !locationGroupId || !zoneId) {
-      return { success: false, error: "Missing required IDs." };
-    }
-
-    const res = await admin.graphql(MUTATION_DELIVERY_PROFILE_UPDATE, {
-      variables: {
-        profileId,
-        profile: { zonesToDelete: [zoneId] },
-      },
-    });
-
-    const resJson = await res.json();
-    const errors = resJson?.data?.deliveryProfileUpdate?.userErrors || [];
-    if (errors.length > 0) {
-      return { success: false, error: errors.map((e) => e.message).join(", ") };
-    }
-
-    try {
-      await prisma.zoneRule.deleteMany({
-        where: { shop: shopDomain, deliveryZoneGid: zoneId },
-      });
-    } catch (_e) {
-      /* ignore if no rule exists */
-    }
-
-    return { success: true, message: `Zone deleted successfully!` };
+    return { success: true, message: `Zone "${zoneName}" updated.` };
   }
 
   return { success: false, error: "Unknown intent" };
@@ -454,122 +421,36 @@ export const action = async ({ request }) => {
 
 export default function ShippingDashboard() {
   const {
+    rules,
     zones,
-    bulkRules,
     carrierStatus,
     profileId,
     locationGroupId,
-    bulkEditEnabled,
   } = useLoaderData();
   const actionData = useActionData();
   const fetcher = useFetcher();
   const revalidator = useRevalidator();
 
   const [selectedTab, setSelectedTab] = useState(0);
-  const [selectedZoneId, setSelectedZoneId] = useState(zones[0]?.id || "");
 
-  // Logic Editor State
-  const [logicType, setLogicType] = useState("STANDARD_TIER");
-  const [currency, setCurrency] = useState("USD");
-  const [rules, setRules] = useState({});
-
-  // Table State
+  // Table filters
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState("ALL");
   const [sortOrder, setSortOrder] = useState("NAME_ASC");
 
-  // Zone Modal State
+  // ZoneModal state (create new zone OR change countries on an existing rule)
   const [zoneModalMode, setZoneModalMode] = useState(null);
   const [modalZoneName, setModalZoneName] = useState("");
   const [modalSelectedRegions, setModalSelectedRegions] = useState({});
   const [expandedCountries, setExpandedCountries] = useState(new Set());
   const [editingZoneId, setEditingZoneId] = useState(null);
   const [countrySearch, setCountrySearch] = useState("");
-  const [deletingZoneId, setDeletingZoneId] = useState(null);
+
+  // EditRuleModal state
+  const [editingRule, setEditingRule] = useState(null);
 
   // Toast
   const [toastMsg, setToastMsg] = useState(null);
-
-  /* Optimistic patches for inline bulk-rule edits. Lifted to this parent
-     because RulesOverview unmounts on tab switch — keeping the optimistic
-     state here means the edited value survives a quick Set-up-rates /
-     Bulk-edit detour, even if the underlying loader hasn't caught up yet
-     inside the Shopify embedded-app iframe (where revalidation can lag). */
-  const [bulkOptimisticEdits, setBulkOptimisticEdits] = useState({});
-
-  /* Drop an optimistic patch when (a) the canonical loader data catches up
-     to it — parity on name/currency/rulesJson — or (b) the rule no longer
-     exists in the loader data at all (deleted via the Bulk edit "Delete"
-     button, or a re-upload created fresh IDs). Without (b) the stale
-     overrides would linger forever and confuse later renders. */
-  useEffect(() => {
-    setBulkOptimisticEdits((prev) => {
-      const keys = Object.keys(prev);
-      if (keys.length === 0) return prev;
-      let changed = false;
-      const next = { ...prev };
-      for (const k of keys) {
-        const real = bulkRules.find((r) => r.id === k);
-        const ovr = prev[k];
-        if (!real) {
-          delete next[k];
-          changed = true;
-          continue;
-        }
-        if (
-          real.name === ovr.name &&
-          real.currency === ovr.currency &&
-          real.rulesJson === ovr.rulesJson
-        ) {
-          delete next[k];
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
-  }, [bulkRules]);
-
-  /* Merged view passed down to RulesOverview — bulkRules with any pending
-     optimistic patches applied so the table always shows the user's most
-     recent edit, regardless of loader state. */
-  const mergedBulkRules = useMemo(() => {
-    if (Object.keys(bulkOptimisticEdits).length === 0) return bulkRules;
-    return bulkRules.map((r) => {
-      const ovr = bulkOptimisticEdits[r.id];
-      return ovr ? { ...r, ...ovr } : r;
-    });
-  }, [bulkRules, bulkOptimisticEdits]);
-
-  const handleBulkRuleEdited = useCallback(
-    (id, patch) => {
-      setBulkOptimisticEdits((prev) => ({ ...prev, [id]: patch }));
-      revalidator.revalidate();
-    },
-    [revalidator],
-  );
-
-  const activeZone = useMemo(
-    () => zones.find((z) => z.id === selectedZoneId),
-    [zones, selectedZoneId],
-  );
-
-  // Sync editor state when active zone changes
-  useEffect(() => {
-    if (activeZone?.rule) {
-      setLogicType(activeZone.rule.logicType);
-      setCurrency(activeZone.rule.currency);
-      setRules(JSON.parse(activeZone.rule.rulesJson || "{}"));
-    } else {
-      /* Unsaved zone starts in "Shopify default" — picking any other model
-         from the dropdown will switch logicType to that value and reveal
-         the price fields. Defaulting to STANDARD_TIER here used to leave
-         the dropdown stuck on DEFAULT because the editor displayed the
-         saved-rule branch instead of local state. */
-      setLogicType("DEFAULT");
-      setCurrency("USD");
-      setRules({});
-    }
-  }, [activeZone]);
 
   /* Toast lifetime scaled to message length — short confirmations
      auto-dismiss quickly, longer errors stay on screen long enough to
@@ -580,7 +461,7 @@ export default function ShippingDashboard() {
     return Math.min(20000, base + String(msg || "").length * perChar);
   };
 
-  // Feedback from fetcher — revalidate in-place instead of full page reload
+  // Feedback from fetcher
   useEffect(() => {
     if (fetcher.data?.message) {
       setToastMsg(fetcher.data.message);
@@ -592,7 +473,7 @@ export default function ShippingDashboard() {
       setToastMsg(m);
       setTimeout(() => setToastMsg(null), toastDuration(m, true));
     }
-  }, [fetcher.data]);
+  }, [fetcher.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (actionData?.message) {
@@ -604,9 +485,9 @@ export default function ShippingDashboard() {
       setToastMsg(m);
       setTimeout(() => setToastMsg(null), toastDuration(m, true));
     }
-  }, [actionData]);
+  }, [actionData]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* ── Zone Modal Handlers ── */
+  /* ── ZoneModal handlers ── */
   const openCreateModal = useCallback(() => {
     setZoneModalMode("create");
     setModalZoneName("");
@@ -617,11 +498,19 @@ export default function ShippingDashboard() {
     shopify.modal.show("zone-modal");
   }, []);
 
-  const openEditModal = useCallback((zone) => {
+  /* "Change countries" from the Edit Rule modal opens this modal seeded
+     with the rule's current coverage. Only valid for zone-wise rules — the
+     bulk path is blocked at the EditRuleModal level. */
+  const openChangeCountries = useCallback((rule) => {
+    /* Find the underlying Shopify zone (zone-wise rule's deliveryZoneGid
+       matches a real Shopify zone GID). */
+    const z = zones.find((zo) => zo.id === rule.deliveryZoneGid);
+    if (!z) return;
+
     setZoneModalMode("edit");
-    setModalZoneName(zone.name);
+    setModalZoneName(z.name);
     const initialRegions = {};
-    zone.countries.forEach((c) => {
+    z.countries.forEach((c) => {
       if (c.provinces && c.provinces.length > 0) {
         initialRegions[c.countryCode] = {
           checked: false,
@@ -638,10 +527,12 @@ export default function ShippingDashboard() {
     });
     setModalSelectedRegions(initialRegions);
     setExpandedCountries(new Set());
-    setEditingZoneId(zone.id);
+    setEditingZoneId(z.id);
     setCountrySearch("");
+    /* Close the EditRule modal first so the two modals don't stack. */
+    setEditingRule(null);
     shopify.modal.show("zone-modal");
-  }, []);
+  }, [zones]);
 
   const handleZoneModalSave = useCallback(() => {
     const body = new FormData();
@@ -669,74 +560,57 @@ export default function ShippingDashboard() {
     editingZoneId,
   ]);
 
-  const handleDeleteZone = useCallback((zoneId) => {
-    setDeletingZoneId(zoneId);
-    shopify.modal.show("delete-zone-modal");
+  /* ── Rule handlers ── */
+  const handleEditRule = useCallback((rule) => {
+    setEditingRule(rule);
   }, []);
 
-  const confirmDeleteZone = useCallback(() => {
-    if (!deletingZoneId) return;
-    const body = new FormData();
-    body.set("intent", "delete_zone");
-    body.set("profileId", profileId);
-    body.set("locationGroupId", locationGroupId);
-    body.set("zoneId", deletingZoneId);
-    fetcher.submit(body, { method: "POST" });
-    shopify.modal.hide("delete-zone-modal");
-    setDeletingZoneId(null);
-  }, [deletingZoneId, fetcher, profileId, locationGroupId]);
+  const handleSaveRule = useCallback(
+    ({ rule, name, currency, logicType, rules }) => {
+      const body = new FormData();
+      body.set("intent", "save_rule");
+      body.set("id", rule.id);
+      body.set("name", name);
+      body.set("currency", currency);
+      body.set("logicType", logicType);
+      body.set("rulesJson", JSON.stringify(rules));
+      fetcher.submit(body, { method: "POST" });
+      setEditingRule(null);
+    },
+    [fetcher],
+  );
 
-  /* ── Rule Handlers ── */
-  const handleSave = () => {
-    if (!activeZone) return;
-    const body = new FormData();
-    body.set("intent", "save_rule");
-    body.set("deliveryZoneGid", activeZone.id);
-    body.set("name", activeZone.name);
-    body.set("countries", JSON.stringify(activeZone.countries));
-    body.set("logicType", logicType);
-    body.set("currency", currency);
-    body.set("rulesJson", JSON.stringify(rules));
-    fetcher.submit(body, { method: "POST" });
-  };
-
-  const handleDeleteRule = (id) => {
-    const body = new FormData();
-    body.set("intent", "delete_rule");
-    body.set("id", id);
-    fetcher.submit(body, { method: "POST" });
-  };
+  const handleDeleteRule = useCallback(
+    (rule) => {
+      const body = new FormData();
+      body.set("intent", "delete_rule");
+      body.set("id", rule.id);
+      if (rule.source === "shopify") {
+        body.set("profileId", profileId);
+        body.set("locationGroupId", locationGroupId);
+      }
+      fetcher.submit(body, { method: "POST" });
+    },
+    [fetcher, profileId, locationGroupId],
+  );
 
   const tabs = [
     {
-      id: "config",
-      content: "Set up rates",
-      accessibilityLabel: "Set shipping rates for one zone at a time",
-    },
-    {
       id: "overview",
       content: "All rates",
-      accessibilityLabel: "See every zone and its current rate at a glance",
+      accessibilityLabel: "See every rule and its current rate at a glance",
     },
     {
       id: "bulk",
       content: "Bulk edit (Excel)",
-      accessibilityLabel: "Download a spreadsheet, edit many zones, upload",
+      accessibilityLabel: "Download a spreadsheet, edit many rules, upload",
     },
   ];
 
   const tabDescriptions = [
-    "Pick a zone on the left, choose how you want to charge for it, and save.",
-    "A single table of every zone, its pricing model and how much it charges. Use this to spot-check or jump back to editing.",
-    "Edit many zones at once by downloading the template, filling it in, and uploading. Best for large catalogues.",
+    "A single table of every shipping rule, its pricing model and how much it charges. Use the Edit button on any row to change the rate, currency, or — for zone-wise rules — which countries it covers.",
+    "Edit many rules at once by downloading the template, filling it in, and uploading. Best for large catalogues.",
   ];
-
-  const handleToggleBulkEdit = (next) => {
-    const body = new FormData();
-    body.set("intent", "toggle_bulk_edit");
-    body.set("enabled", next ? "true" : "false");
-    fetcher.submit(body, { method: "POST" });
-  };
 
   /* ───────────────────────── Render ─────────────────────────────────── */
 
@@ -759,7 +633,7 @@ export default function ShippingDashboard() {
             </div>
           </div>
 
-          {/* ── Status Banners ── */}
+          {/* ── Status banners ── */}
           {carrierStatus.message && (
             <Banner
               tone={carrierStatus.state === "success" ? "success" : "info"}
@@ -779,16 +653,13 @@ export default function ShippingDashboard() {
                   body.set("intent", "cleanup_carrier_services");
                   body.set(
                     "ids",
-                    JSON.stringify(
-                      carrierStatus.staleServices.map((s) => s.id),
-                    ),
+                    JSON.stringify(carrierStatus.staleServices.map((s) => s.id)),
                   );
                   fetcher.submit(body, { method: "POST" });
                 },
                 loading:
                   fetcher.state === "submitting" &&
-                  fetcher.formData?.get("intent") ===
-                    "cleanup_carrier_services",
+                  fetcher.formData?.get("intent") === "cleanup_carrier_services",
               }}
             >
               <p>
@@ -799,7 +670,7 @@ export default function ShippingDashboard() {
             </Banner>
           )}
 
-          {/* ── Main Content ── */}
+          {/* ── Main content ── */}
           <Tabs tabs={tabs} selected={selectedTab} onSelect={setSelectedTab}>
             <Box paddingBlockStart="300" paddingInlineStart="400" paddingInlineEnd="400">
               <InlineStack align="space-between" blockAlign="center" gap="400" wrap={false}>
@@ -808,8 +679,8 @@ export default function ShippingDashboard() {
                 </Text>
                 {/* Bulk Edit has its own inline "View documentation" buttons
                     and a dedicated guide modal, so hiding the global Help
-                    guide here keeps the toolbar from looking redundant. */}
-                {selectedTab !== 2 && (
+                    guide on that tab keeps the toolbar from looking redundant. */}
+                {selectedTab !== 1 && (
                   <Button
                     icon={InfoIcon}
                     onClick={() => shopify.modal.show("docs-modal")}
@@ -820,83 +691,27 @@ export default function ShippingDashboard() {
                 )}
               </InlineStack>
             </Box>
-            <Box paddingBlockStart="400">
-              {/* When Bulk Edit owns rule editing, lock the other tabs to
-                  read-only so the two paths don't fight each other. Rules
-                  stay in the DB — they just become editable again when Bulk
-                  Edit is turned off. */}
-              {bulkEditEnabled && selectedTab !== 2 && (
-                <Box paddingBlockEnd="300">
-                  <Banner
-                    tone="info"
-                    title="You're using the Excel spreadsheet right now"
-                  >
-                    <p>
-                      Customers are seeing the rates you uploaded in the{" "}
-                      <b>Bulk edit</b> tab. The zone-by-zone settings on this
-                      page are saved but switched off until you turn Bulk edit
-                      off again — nothing here is lost.
-                    </p>
-                  </Banner>
-                </Box>
-              )}
-              {selectedTab === 0 ? (
-                <div
-                  className="config-grid"
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "384px 1fr",
-                    gap: "24px",
-                    alignItems: "start",
-                  }}
-                >
-                  <ZoneSidebar
-                    zones={zones}
-                    selectedZoneId={selectedZoneId}
-                    onSelectZone={setSelectedZoneId}
-                    onCreateZone={openCreateModal}
-                    disabled={bulkEditEnabled}
-                  />
 
-                  <LogicEditor
-                    activeZone={activeZone}
-                    logicType={logicType}
-                    setLogicType={setLogicType}
-                    currency={currency}
-                    setCurrency={setCurrency}
-                    rules={rules}
-                    setRules={setRules}
-                    onSave={handleSave}
-                    onDeleteRule={handleDeleteRule}
-                    onEditRegions={openEditModal}
-                    onDeleteZone={handleDeleteZone}
-                    onCreateZone={openCreateModal}
-                    isSaving={fetcher.state === "submitting"}
-                    disabled={bulkEditEnabled}
-                  />
-                </div>
-              ) : selectedTab === 1 ? (
+            <Box paddingBlockStart="400">
+              {selectedTab === 0 ? (
                 <RulesOverview
-                  zones={zones}
-                  bulkRules={mergedBulkRules}
+                  rules={rules}
                   searchQuery={searchQuery}
                   setSearchQuery={setSearchQuery}
                   filterType={filterType}
                   setFilterType={setFilterType}
                   sortOrder={sortOrder}
                   setSortOrder={setSortOrder}
-                  onEditZone={(id) => {
-                    setSelectedZoneId(id);
-                    setSelectedTab(0);
-                  }}
+                  onEditRule={handleEditRule}
                   onDeleteRule={handleDeleteRule}
-                  onBulkRuleEdited={handleBulkRuleEdited}
-                  disabled={bulkEditEnabled}
-                  bulkMode={bulkEditEnabled}
+                  onAddZone={openCreateModal}
+                  isDeleting={
+                    fetcher.state === "submitting" &&
+                    fetcher.formData?.get("intent") === "delete_rule"
+                  }
                 />
               ) : (
                 <BulkEdit
-                  enabled={bulkEditEnabled}
                   onToast={(m) => {
                     setToastMsg(m);
                     revalidator.revalidate();
@@ -905,12 +720,7 @@ export default function ShippingDashboard() {
                       toastDuration(m, String(m || "").startsWith("Error")),
                     );
                   }}
-                  onApplied={() => setSelectedTab(1)}
-                  onToggleEnabled={handleToggleBulkEdit}
-                  toggling={
-                    fetcher.state === "submitting" &&
-                    fetcher.formData?.get("intent") === "toggle_bulk_edit"
-                  }
+                  onApplied={() => setSelectedTab(0)}
                 />
               )}
             </Box>
@@ -918,6 +728,7 @@ export default function ShippingDashboard() {
         </BlockStack>
       </div>
 
+      {/* Zone create / change-countries modal */}
       <ZoneModal
         zoneModalMode={zoneModalMode}
         modalZoneName={modalZoneName}
@@ -929,9 +740,23 @@ export default function ShippingDashboard() {
         countrySearch={countrySearch}
         setCountrySearch={setCountrySearch}
         onSave={handleZoneModalSave}
-        deletingZoneId={deletingZoneId}
-        setDeletingZoneId={setDeletingZoneId}
-        onConfirmDelete={confirmDeleteZone}
+        deletingZoneId={null}
+        setDeletingZoneId={() => {}}
+        onConfirmDelete={() => {}}
+      />
+
+      {/* Edit Rule modal — pricing model, currency, rate. Opens from the
+          Edit button on each row of the All rates table. */}
+      <EditRuleModal
+        open={!!editingRule}
+        rule={editingRule}
+        onClose={() => setEditingRule(null)}
+        onSave={handleSaveRule}
+        onChangeCountries={openChangeCountries}
+        isSaving={
+          fetcher.state === "submitting" &&
+          fetcher.formData?.get("intent") === "save_rule"
+        }
       />
 
       {/* ── Documentation Modal ── */}
@@ -961,20 +786,17 @@ export default function ShippingDashboard() {
 
           {/* ── Quick start ── */}
           <section id="docs-quickstart" className="shipofix-docs-section">
-            <h2>Quick start · 4 steps</h2>
+            <h2>Quick start · 3 steps</h2>
             <ol className="shipofix-docs-steps">
               <li>
-                <b>Pick a zone</b> from the list on the left of the{" "}
-                <i>Set up rates</i> tab. A zone is just a group of countries
-                that share the same shipping price.
+                <b>Click &ldquo;+ Add new zone&rdquo;</b> on the All rates
+                tab. Give the zone a name, tick the countries (and provinces,
+                if needed), and click <i>Create</i>.
               </li>
               <li>
-                <b>Choose a pricing model</b> from the dropdown — flat rate,
-                weight tiers, percent of cart, and so on.
-              </li>
-              <li>
-                <b>Type your price</b> in the fields that appear. The currency
-                you pick is shown next to every price box.
+                <b>Click Edit</b> on the row that appeared. Pick a pricing
+                model from the dropdown — flat rate, weight tiers, percent
+                of cart, and so on. Type your price.
               </li>
               <li>
                 <b>Click &ldquo;Save shipping rate&rdquo;.</b> Customers see
@@ -982,7 +804,7 @@ export default function ShippingDashboard() {
               </li>
             </ol>
             <div className="shipofix-docs-tip">
-              <b>Tip:</b> Want to edit lots of zones at once? Use the{" "}
+              <b>Tip:</b> Want to edit lots of rules at once? Use the{" "}
               <i>Bulk edit (Excel)</i> tab — see below.
             </div>
           </section>
@@ -999,21 +821,23 @@ export default function ShippingDashboard() {
             </p>
             <ul className="shipofix-docs-bullets">
               <li>
-                <b>Add a new zone</b> — click the &ldquo;Add new zone&rdquo;
-                button in the left panel and tick the countries.
+                <b>Add a new zone</b> — click the &ldquo;+ Add new zone&rdquo;
+                button at the top right of the All rates table and tick the
+                countries.
               </li>
               <li>
-                <b>Change countries</b> — open a zone and click{" "}
-                &ldquo;Change countries&rdquo; in the top right.
+                <b>Change countries</b> — open a rule with Edit, then click{" "}
+                &ldquo;Change countries&rdquo;.
               </li>
               <li>
-                <b>Delete a zone</b> — click &ldquo;Delete zone&rdquo;. The
-                zone is removed from your store&apos;s shipping settings.
+                <b>Delete a rule</b> — click <i>Delete</i> on the row. The
+                rule (and, for zone-wise rules, the underlying Shopify
+                delivery zone) is removed.
               </li>
               <li>
                 <b>Use Shopify&apos;s own rates instead</b> — change the
-                pricing model dropdown to &ldquo;Shopify default&rdquo;. Your
-                zone is kept, but Shopify decides the price.
+                pricing model dropdown to &ldquo;Shopify default&rdquo;. The
+                rule stays in place, but Shopify decides the price.
               </li>
             </ul>
           </section>
@@ -1022,7 +846,7 @@ export default function ShippingDashboard() {
           <section id="docs-models" className="shipofix-docs-section">
             <h2>The 6 pricing models</h2>
             <p>
-              Each zone uses one of these. Pick the one that matches how you
+              Each rule uses one of these. Pick the one that matches how you
               normally quote shipping.
             </p>
             <div className="shipofix-docs-model">
@@ -1082,22 +906,23 @@ export default function ShippingDashboard() {
           <section id="docs-bulk" className="shipofix-docs-section">
             <h2>Bulk edit (Excel)</h2>
             <p>
-              If you have lots of zones, editing one at a time is slow. The{" "}
+              If you have lots of rules, editing one at a time is slow. The{" "}
               <i>Bulk edit (Excel)</i> tab lets you:
             </p>
             <ol className="shipofix-docs-steps">
-              <li>Download a spreadsheet with every country and zone pre-filled.</li>
+              <li>Download a spreadsheet with every country pre-filled.</li>
               <li>Fill in the rule <b>Name</b>, <b>Pricing model</b>, <b>Currency</b> and <b>Price</b> on the rows you care about.</li>
-              <li>Upload the file. Shipofix replaces every bulk-edit rule with what you uploaded.</li>
+              <li>Upload the file. Shipofix replaces every previously-uploaded rule with what you uploaded.</li>
             </ol>
             <div className="shipofix-docs-tip">
-              While bulk edit is on, the zone-by-zone settings in{" "}
-              <i>Set up rates</i> are paused — but kept safe. Turn bulk edit
-              off any time and they take over again.
+              Excel-uploaded rules live alongside zone-wise rules — both show
+              up in the All rates table and both apply at checkout. Re-uploading
+              the file only touches rules that came from Excel; your
+              zone-wise rules are never overwritten.
             </div>
             <p>
               The Bulk edit tab has its own detailed walkthrough (button:{" "}
-              <i>View documentation</i>) with examples and a country/zone
+              <i>View documentation</i>) with examples and a country / zone
               code lookup.
             </p>
           </section>
@@ -1106,7 +931,7 @@ export default function ShippingDashboard() {
           <section id="docs-currency" className="shipofix-docs-section">
             <h2>Currency</h2>
             <p>
-              Each zone has its own currency. Pick it from the dropdown when
+              Each rule has its own currency. Pick it from the dropdown when
               setting up the price — the currency symbol shows next to every
               price box so you never mix them up. Shopify converts the price
               for your customer at checkout if their currency is different.
@@ -1118,7 +943,7 @@ export default function ShippingDashboard() {
             <h2>How Shipofix talks to your checkout</h2>
             <p>
               When a customer reaches checkout, Shopify asks Shipofix what to
-              charge. Shipofix looks up the right zone, applies the rate
+              charge. Shipofix looks up the right rule, applies the rate
               you&apos;ve set, and sends the answer back. You don&apos;t need
               to do anything — this happens automatically.
             </p>
@@ -1149,25 +974,18 @@ export default function ShippingDashboard() {
               </p>
             </div>
             <div className="shipofix-docs-faq">
-              <h3>What if a country isn&apos;t in any zone?</h3>
+              <h3>What if a country isn&apos;t in any rule?</h3>
               <p>
                 Customers from that country won&apos;t see a Shipofix rate.
-                Add the country to an existing zone, or create a{" "}
+                Add the country to an existing rule, or create a{" "}
                 <b>Rest of world</b> zone to catch everything else.
-              </p>
-            </div>
-            <div className="shipofix-docs-faq">
-              <h3>Will my saved rates disappear if I turn bulk edit on?</h3>
-              <p>
-                No. Your zone-by-zone rates are kept exactly as they are.
-                Turning bulk edit off brings them back instantly.
               </p>
             </div>
             <div className="shipofix-docs-faq">
               <h3>How do I let Shopify handle a zone instead?</h3>
               <p>
                 Change the pricing-model dropdown to <b>Shopify default</b>.
-                Shipofix steps aside for that zone and Shopify quotes its own
+                Shipofix steps aside for that rule and Shopify quotes its own
                 rate.
               </p>
             </div>

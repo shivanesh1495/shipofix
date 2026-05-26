@@ -113,27 +113,14 @@ export const action = async ({ request }) => {
 
     await log({ event: "CART_TOTALS", totalKg: totalKg.toFixed(3), totalItems, totalPrice, currency: rate.currency });
 
-    /* ── Pick the active ruleset ──
-       When Bulk Edit is on, rules from the Excel upload (BulkEditRule)
-       take over. When it's off, the zone-wise rules (ZoneRule) apply.
-       Both tables persist independently — toggling just swaps which one
-       the carrier service reads. */
-    const appSetting = await prisma.appSetting.findUnique({
-      where: { shop: shopDomain },
-    });
-    const bulkActive = appSetting ? appSetting.bulkEditEnabled : false;
-    /* Fall back to zoneRule when bulkEditRule isn't on the client yet
-       (Prisma client not regenerated after the model was added). Avoids a
-       checkout-time crash. */
-    const ruleTable =
-      bulkActive && prisma.bulkEditRule
-        ? prisma.bulkEditRule
-        : prisma.zoneRule;
-
-    /* ── Zone matching ──
-       Use countryCode-specific pattern to avoid false positives —
-       e.g. US/Indiana has province code "IN" which would falsely match India "IN" */
-    const candidates = await ruleTable.findMany({
+    /* ── Match candidate rules ──
+       Every rule lives in a single ZoneRule table — both zone-wise rules
+       (source = 'shopify') and Excel-uploaded rules (source = 'bulk') are
+       always active and matched against incoming requests by country
+       coverage. Use a countryCode-specific contains pattern to avoid false
+       positives — e.g. US/Indiana has province code "IN" which would
+       otherwise falsely match India "IN". */
+    const candidates = await prisma.zoneRule.findMany({
       where: {
         shop: shopDomain,
         OR: [
@@ -143,9 +130,7 @@ export const action = async ({ request }) => {
       },
     });
 
-    await log({ event: "RULE_SOURCE", bulkActive, table: bulkActive ? "BulkEditRule" : "ZoneRule" });
-
-    await log({ event: "DB_CANDIDATES", count: candidates.length, rules: candidates.map(r => ({ name: r.name, logic: r.logicType, gid: r.deliveryZoneGid })) });
+    await log({ event: "DB_CANDIDATES", count: candidates.length, rules: candidates.map(r => ({ name: r.name, logic: r.logicType, gid: r.deliveryZoneGid, source: r.source })) });
 
     let matchedRule = null;
     let matchedScore = -1;

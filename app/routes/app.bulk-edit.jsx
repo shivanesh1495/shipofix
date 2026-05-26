@@ -3,7 +3,8 @@
  * Bulk Edit resource route.
  *
  * GET  /app/bulk-edit?intent=template   → download .xlsx template
- * POST /app/bulk-edit                   → upload filled .xlsx, upsert BulkEditRule rows
+ * POST /app/bulk-edit                   → upload filled .xlsx, upsert ZoneRule rows
+ *                                          tagged with source='bulk'
  *
  * Excel semantics:
  *   - Name column = rule name (free-form, vendor's choice).
@@ -12,6 +13,11 @@
  *     Empty Zone = whole country. "Rest of World" = catch-all.
  *   - Logic #, Currency, and the rate value(s) are taken from the rule's
  *     filled rows (first non-blank wins for Logic / Currency).
+ *
+ * Bulk-edit rules share the ZoneRule table with one-by-one zone rules. They
+ * are distinguished by `source = 'bulk'` and a synthetic `bulk:<slug>` GID.
+ * Re-uploading an Excel file replaces every existing bulk rule for the shop
+ * but never touches zone-wise rules (source = 'shopify').
  */
 
 import * as XLSX from "xlsx";
@@ -684,8 +690,7 @@ export const loader = async ({ request }) => {
     return new Response("Not found", { status: 404 });
   }
 
-  const { admin, session } = await authenticate.admin(request);
-  const shopDomain = session.shop;
+  const { admin } = await authenticate.admin(request);
 
   /* Fetch live zones from Shopify */
   const zoneRes = await admin.graphql(QUERY_DELIVERY_ZONES);
@@ -1022,27 +1027,21 @@ export const loader = async ({ request }) => {
 /* ── Action: upload filled template ─────────────────────────────────── */
 
 export const action = async ({ request }) => {
-  const { admin, session } = await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
   const shopDomain = session.shop;
-
-  const setting = await prisma.appSetting.findUnique({
-    where: { shop: shopDomain },
-  });
-  if (setting && setting.bulkEditEnabled === false) {
-    return { success: false, error: "Bulk Edit is currently disabled." };
-  }
 
   const formData = await request.formData();
   const intent = String(formData.get("intent") || "").trim();
 
-  /* Inline edit of a single BulkEditRule from the Rules Overview tab.
-     Updates only the safe-to-tweak fields (name, currency, rulesJson) — the
-     rule's coverage (countries/provinces) and logicType are left alone here;
-     structural changes still go through download → edit Excel → re-upload.
-     After the DB update we rebuild the stored xlsx so the "Last uploaded
-     file" download always matches the latest state. */
+  /* Inline edit of a single bulk rule (source='bulk') from the Rules
+     Overview tab. Updates only the safe-to-tweak fields (name, currency,
+     rulesJson) — the rule's coverage (countries/provinces) and logicType
+     are left alone here; structural changes still go through download →
+     edit Excel → re-upload. After the DB update we rebuild the stored
+     xlsx so the "Last uploaded file" download always matches the latest
+     state. */
   if (intent === "edit_rule") {
-    if (!prisma.bulkEditRule || !prisma.bulkEditUpload) {
+    if (!prisma.bulkEditUpload) {
       return {
         success: false,
         error:
@@ -1071,8 +1070,8 @@ export const action = async ({ request }) => {
       return { success: false, error: "Couldn't read the rule values you entered." };
     }
 
-    const existing = await prisma.bulkEditRule.findFirst({
-      where: { id, shop: shopDomain },
+    const existing = await prisma.zoneRule.findFirst({
+      where: { id, shop: shopDomain, source: "bulk" },
     });
     if (!existing) return { success: false, error: "Rule not found for this shop." };
 
@@ -1151,7 +1150,7 @@ export const action = async ({ request }) => {
       finalJson = JSON.stringify(payload);
     }
 
-    await prisma.bulkEditRule.update({
+    await prisma.zoneRule.update({
       where: { id },
       data: {
         name: nextName,
@@ -1180,8 +1179,8 @@ export const action = async ({ request }) => {
       });
     }
     if (!buf) {
-      const allRules = await prisma.bulkEditRule.findMany({
-        where: { shop: shopDomain },
+      const allRules = await prisma.zoneRule.findMany({
+        where: { shop: shopDomain, source: "bulk" },
       });
       buf = await buildWorkbookFromBulkRules(allRules);
     }
@@ -1205,31 +1204,25 @@ export const action = async ({ request }) => {
     return { success: true, message: `Rule "${nextName}" updated.` };
   }
 
-  /* Delete a single BulkEditRule from the Rules Overview tab. The stored
-     xlsx blob is rebuilt from the remaining rules so the "Last uploaded
-     file" download stays in sync; if no rules remain, the blob is dropped
-     entirely. */
+  /* Delete a single bulk rule from the Rules Overview tab. The stored
+     xlsx blob is rebuilt from the remaining bulk rules so the "Last
+     uploaded file" download stays in sync; if no bulk rules remain, the
+     blob is dropped entirely. Zone-wise rules (source='shopify') are
+     untouched. */
   if (intent === "delete_rule") {
-    if (!prisma.bulkEditRule) {
-      return {
-        success: false,
-        error:
-          "Bulk Edit storage isn't initialised yet. Run `npx prisma generate` and restart.",
-      };
-    }
     const id = String(formData.get("id") || "").trim();
     if (!id) return { success: false, error: "Missing rule id." };
 
-    const existing = await prisma.bulkEditRule.findFirst({
-      where: { id, shop: shopDomain },
+    const existing = await prisma.zoneRule.findFirst({
+      where: { id, shop: shopDomain, source: "bulk" },
     });
     if (!existing) return { success: false, error: "Rule not found for this shop." };
 
     const deletedName = existing.name;
-    await prisma.bulkEditRule.delete({ where: { id } });
+    await prisma.zoneRule.delete({ where: { id } });
 
-    const remaining = await prisma.bulkEditRule.findMany({
-      where: { shop: shopDomain },
+    const remaining = await prisma.zoneRule.findMany({
+      where: { shop: shopDomain, source: "bulk" },
     });
 
     if (prisma.bulkEditUpload) {
@@ -1267,14 +1260,11 @@ export const action = async ({ request }) => {
      also clear the rules it created — otherwise the table on the All
      rates tab keeps showing rules with no file behind them and there's
      no way to remove them without re-uploading a fresh file. Zone-wise
-     rules (ZoneRule) and app settings are untouched. */
+     rules (source='shopify') and app settings are untouched. */
   if (intent === "delete_last") {
-    let wiped = { count: 0 };
-    if (prisma.bulkEditRule) {
-      wiped = await prisma.bulkEditRule.deleteMany({
-        where: { shop: shopDomain },
-      });
-    }
+    const wiped = await prisma.zoneRule.deleteMany({
+      where: { shop: shopDomain, source: "bulk" },
+    });
     if (prisma.bulkEditUpload) {
       await prisma.bulkEditUpload.deleteMany({ where: { shop: shopDomain } });
     }
@@ -1355,11 +1345,12 @@ export const action = async ({ request }) => {
     };
   }
 
-  /* Replace semantics, scoped to the bulk-edit ruleset only. Zone-wise
-     rules in ZoneRule are untouched so toggling Bulk Edit off later brings
-     them back exactly as they were. The wipe is deferred until AFTER full
-     validation succeeds — if any rule has an error, nothing is touched. */
-  if (!prisma.bulkEditRule || !prisma.bulkEditUpload) {
+  /* Replace semantics, scoped to bulk-source rules only. Zone-wise rules
+     (source='shopify') are untouched, so an Excel upload never wipes
+     rules the user set up via the one-by-one editor. The wipe is
+     deferred until AFTER full validation succeeds — if any rule has an
+     error, nothing is touched. */
+  if (!prisma.bulkEditUpload) {
     return {
       success: false,
       error:
@@ -1813,13 +1804,14 @@ export const action = async ({ request }) => {
   }
 
   /* ── Commit phase ───────────────────────────────────────────────────
-     Wipe the bulk-edit ruleset only after we know every rule is valid,
+     Wipe the bulk-source ruleset only (zone-wise rules with
+     source='shopify' are NOT touched) after we know every rule is valid,
      then write the queued rules. */
-  const wipedCount = await prisma.bulkEditRule.deleteMany({
-    where: { shop: shopDomain },
+  const wipedCount = await prisma.zoneRule.deleteMany({
+    where: { shop: shopDomain, source: "bulk" },
   });
   for (const r of rulesToWrite) {
-    await prisma.bulkEditRule.upsert({
+    await prisma.zoneRule.upsert({
       where: {
         shop_deliveryZoneGid: { shop: shopDomain, deliveryZoneGid: r.gid },
       },
@@ -1829,6 +1821,7 @@ export const action = async ({ request }) => {
         logicType: r.logicType,
         rulesJson: r.rulesJson,
         currency: r.currency,
+        source: "bulk",
       },
       create: {
         shop: shopDomain,
@@ -1838,6 +1831,7 @@ export const action = async ({ request }) => {
         logicType: r.logicType,
         rulesJson: r.rulesJson,
         currency: r.currency,
+        source: "bulk",
       },
     });
     summary.updated += 1;

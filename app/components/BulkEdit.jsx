@@ -3,6 +3,10 @@
  *
  * Vendor downloads a pre-filled .xlsx, edits Logic # / values, uploads.
  * Empty Logic # rows are skipped — existing rules stay untouched.
+ *
+ * Uploaded rules are written into ZoneRule with source='bulk' and live
+ * alongside one-by-one zone rules. Re-uploading replaces every previously-
+ * uploaded bulk rule but never touches zone-wise rules.
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -21,13 +25,7 @@ import {
 } from "@shopify/polaris";
 import BulkEditDocs from "./BulkEditDocs";
 
-export default function BulkEdit({
-  enabled,
-  onToast,
-  onApplied,
-  onToggleEnabled,
-  toggling = false,
-}) {
+export default function BulkEdit({ onToast, onApplied }) {
   const fetcher = useFetcher();
   const [file, setFile] = useState(null);
   const [lastResult, setLastResult] = useState(null);
@@ -172,39 +170,11 @@ export default function BulkEdit({
     </>
   );
 
-  if (!enabled) {
-    return (
-      <Card>
-        <Box padding="500">
-          <BlockStack gap="300" align="center" inlineAlign="center">
-            <Text variant="headingMd" as="h3">Bulk edit is off</Text>
-            <Text tone="subdued" alignment="center">
-              Right now your rates come from the <b>Set up rates</b> tab — one
-              zone at a time. Turn bulk edit on if you&apos;d rather download a
-              spreadsheet, edit lots of zones at once, and upload them back.
-              Your zone-by-zone rates stay saved either way.
-            </Text>
-            {onToggleEnabled && (
-              <Button
-                variant="primary"
-                loading={toggling}
-                onClick={() => onToggleEnabled(true)}
-              >
-                Turn on bulk edit
-              </Button>
-            )}
-          </BlockStack>
-        </Box>
-      </Card>
-    );
-  }
-
   return (
     <BlockStack gap="400">
       {/* Two-column layout. LEFT column holds the full workflow top-to-
           bottom: Step 1 (download) → Step 2 (upload) → result banners.
-          RIGHT column holds context that doesn't move with the flow:
-          the feature toggle and the docs pointer. Collapses to one column
+          RIGHT column holds the docs pointer. Collapses to one column
           under 980 px via the bulk-edit-split CSS class. */}
       <div className="bulk-edit-split">
         {/* ── LEFT column: Step 1 → Step 2 → results ── */}
@@ -247,10 +217,9 @@ export default function BulkEdit({
                 <BlockStack gap="100">
                   <Text variant="headingMd" as="h3">Step 2 · Upload the filled template</Text>
                   <Text tone="subdued">
-                    Uploading replaces the entire <b>bulk-edit ruleset</b> for this
-                    shop. Your zone-wise rules from Configuration Logic are
-                    untouched and will become active again the moment Bulk Edit is
-                    turned off.
+                    Uploading replaces every previously-uploaded rule for this
+                    shop. Rules you created one-by-one from the All rates tab
+                    are untouched.
                   </Text>
                 </BlockStack>
 
@@ -303,34 +272,9 @@ export default function BulkEdit({
           </BlockStack>
         </div>
 
-        {/* ── RIGHT column: feature toggle, docs pointer ── */}
+        {/* ── RIGHT column: docs pointer ── */}
         <div className="bulk-edit-split-col">
           <BlockStack gap="400">
-            {/* Feature toggle — managed by app, kept beside the workflow itself */}
-            {onToggleEnabled && (
-              <Card>
-                <InlineStack align="space-between" blockAlign="center" gap="400" wrap={false}>
-                  <BlockStack gap="100">
-                    <InlineStack gap="200" blockAlign="center">
-                      <Text variant="headingMd" as="h3">Bulk Edit</Text>
-                      <Badge tone="success">On</Badge>
-                    </InlineStack>
-                    <Text tone="subdued">
-                      Import shipping rules from an Excel template · Managed by app
-                    </Text>
-                  </BlockStack>
-                  <Button
-                    tone="critical"
-                    loading={toggling}
-                    onClick={() => onToggleEnabled(false)}
-                  >
-                    Turn off
-                  </Button>
-                </InlineStack>
-              </Card>
-            )}
-
-            {/* Quick pointer to the full guide (Logic #, codes, examples) */}
             <Banner
               tone="info"
               title="New to the template? Read the guide first."
@@ -345,7 +289,6 @@ export default function BulkEdit({
                 &amp; 3) — and lists every Logic # and country / zone code.
               </Text>
             </Banner>
-
           </BlockStack>
         </div>
       </div>

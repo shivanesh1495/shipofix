@@ -1649,6 +1649,37 @@ export const action = async ({ request }) => {
       }
     }
 
+    /* Multiplier rules (Logic 4 / 5 / 6) charge a single per-unit rate that
+       applies to the whole rule — they have no per-destination override
+       semantics. If the vendor typed different numeric rates on multiple
+       rows that share a Name, that's almost always a mistake (often a
+       half-finished edit) and would silently keep only one value. Block the
+       upload so the inconsistency is fixed before anything is saved. */
+    const isMultiplierLogic =
+      logicType === "WEIGHT_MULTIPLIER" ||
+      logicType === "PRICE_MULTIPLIER" ||
+      logicType === "ITEM_MULTIPLIER";
+    if (isMultiplierLogic) {
+      const distinctRates = new Set();
+      for (const b of g.rateRows) {
+        const n = Number(b.rate);
+        if (b.rate !== "" && b.rate != null && Number.isFinite(n)) {
+          distinctRates.add(n);
+        }
+      }
+      if (distinctRates.size > 1) {
+        const list = [...distinctRates].sort((a, b) => a - b).join(", ");
+        const logicLabel =
+          logicType === "WEIGHT_MULTIPLIER" ? "Logic 4 · Per KG Dynamic"
+          : logicType === "PRICE_MULTIPLIER" ? "Logic 5 · Per Price Dynamic"
+          : "Logic 6 · Per Item Dynamic";
+        summary.errors.push(
+          `Rule "${name}" (${logicLabel}): rows share a Name but have different Rate values (${list}). Per-kg / per-price / per-item rules use a single rate across every row — set every Rate cell for "${name}" to the same number.`,
+        );
+        continue;
+      }
+    }
+
     /* Currency: explicit > USD. (The previous bulk-rule row isn't consulted
        because the apply phase wipes the whole bulk-edit ruleset before
        writing — there's no prior currency to inherit.) */

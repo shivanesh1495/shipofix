@@ -433,9 +433,38 @@ export const action = async ({ request }) => {
       return { success: false, error: "Pick at least one country." };
     }
 
+    /* Prune per-destination overrides that no longer match the new coverage,
+       otherwise the View modal keeps showing stale rows (e.g. all 13 CA
+       provinces) for a country whose coverage was just narrowed. We only
+       touch the overrides array; the base rate and other fields are kept. */
+    let nextRulesJson = rule.rulesJson;
+    try {
+      const parsed = JSON.parse(rule.rulesJson || "{}");
+      if (Array.isArray(parsed.overrides)) {
+        const coverageByCountry = new Map();
+        for (const c of countriesArr) {
+          if (!c.countryCode) continue;
+          coverageByCountry.set(
+            c.countryCode,
+            new Set((c.provinces || []).map((p) => p.code)),
+          );
+        }
+        parsed.overrides = parsed.overrides.filter((o) => {
+          if (!coverageByCountry.has(o.countryCode)) return false;
+          const provs = coverageByCountry.get(o.countryCode);
+          /* Empty provinces set = whole country covered → keep any override */
+          if (provs.size === 0) return true;
+          return o.province ? provs.has(o.province) : true;
+        });
+        nextRulesJson = JSON.stringify(parsed);
+      }
+    } catch {
+      /* leave rulesJson untouched if it isn't parseable */
+    }
+
     await prisma.zoneRule.update({
       where: { id },
-      data: { countries: JSON.stringify(countriesArr) },
+      data: { countries: JSON.stringify(countriesArr), rulesJson: nextRulesJson },
     });
 
     return { success: true, message: `"${rule.name}" coverage updated.` };

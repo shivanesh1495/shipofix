@@ -402,6 +402,45 @@ export const action = async ({ request }) => {
     };
   }
 
+  /* ── Update a bulk (Excel) rule's coverage only — no Shopify zone exists
+       to mutate, so we just rewrite the ZoneRule.countries JSON. The user
+       sees the change immediately; the next re-upload will overwrite it. ── */
+  if (intent === "update_rule_coverage") {
+    const id = formData.get("id");
+    const countryCodes = JSON.parse(formData.get("countryCodes") || "{}");
+    if (!id) return { success: false, error: "Missing rule id." };
+
+    const rule = await prisma.zoneRule.findFirst({
+      where: { id, shop: shopDomain },
+    });
+    if (!rule) return { success: false, error: "Rule not found." };
+
+    /* Convert the {code: {checked, indeterminate, provinces}} map into the
+       same {countryCode, name, restOfWorld, provinces[]} shape we already
+       persist for zone-wise rules — keeps coverage rendering consistent. */
+    const countriesArr = Object.entries(countryCodes).map(([code, data]) => {
+      const provinces = data.indeterminate
+        ? (data.provinces || []).map((p) => ({ code: p }))
+        : [];
+      return {
+        countryCode: code,
+        restOfWorld: code === "*" || code === "ROW",
+        provinces,
+      };
+    });
+
+    if (countriesArr.length === 0) {
+      return { success: false, error: "Pick at least one country." };
+    }
+
+    await prisma.zoneRule.update({
+      where: { id },
+      data: { countries: JSON.stringify(countriesArr) },
+    });
+
+    return { success: true, message: `"${rule.name}" coverage updated.` };
+  }
+
   /* ── Update a Shopify zone's countries (called from "Change countries") ── */
   if (intent === "update_zone") {
     const profileId = formData.get("profileId");
@@ -479,6 +518,7 @@ export default function ShippingDashboard() {
   const [modalSelectedRegions, setModalSelectedRegions] = useState({});
   const [expandedCountries, setExpandedCountries] = useState(new Set());
   const [editingZoneId, setEditingZoneId] = useState(null);
+  const [editingBulkRuleId, setEditingBulkRuleId] = useState(null);
   const [countrySearch, setCountrySearch] = useState("");
 
   // EditRuleModal state
@@ -534,26 +574,45 @@ export default function ShippingDashboard() {
   }, []);
 
   /* "Change countries" from the Edit Rule modal opens this modal seeded
-     with the rule's current coverage. Only valid for zone-wise rules — the
-     bulk path is blocked at the EditRuleModal level. */
+     with the rule's current coverage. Works for both zone-wise rules
+     (mutates the Shopify zone) and bulk rules (just rewrites the ZoneRule
+     row — no Shopify zone exists for these). */
   const openChangeCountries = useCallback((rule) => {
-    /* Find the underlying Shopify zone (zone-wise rule's deliveryZoneGid
-       matches a real Shopify zone GID). */
-    const z = zones.find((zo) => zo.id === rule.deliveryZoneGid);
-    if (!z) return;
+    /* Build the seed regions map from whichever source carries the rule's
+       current coverage. Zone-wise rules pull from the live Shopify zone so
+       we always reflect the latest server state; bulk rules pull from the
+       ZoneRule.countries JSON since they have no Shopify zone. */
+    let seedCountries = [];
+    let seedName = rule.name || "";
+    const isBulkRule = rule.source === "bulk";
 
-    setZoneModalMode("edit");
-    setModalZoneName(z.name);
+    if (isBulkRule) {
+      try {
+        seedCountries = JSON.parse(rule.countries || "[]");
+      } catch {
+        seedCountries = [];
+      }
+    } else {
+      const z = zones.find((zo) => zo.id === rule.deliveryZoneGid);
+      if (!z) return;
+      seedCountries = z.countries;
+      seedName = z.name;
+    }
+
+    setZoneModalMode(isBulkRule ? "edit-bulk" : "edit");
+    setModalZoneName(seedName);
     const initialRegions = {};
-    z.countries.forEach((c) => {
+    seedCountries.forEach((c) => {
+      if (!c.countryCode && !c.restOfWorld) return;
+      const code = c.restOfWorld ? "*" : c.countryCode;
       if (c.provinces && c.provinces.length > 0) {
-        initialRegions[c.countryCode] = {
+        initialRegions[code] = {
           checked: false,
           indeterminate: true,
           provinces: c.provinces.map((p) => p.code),
         };
       } else {
-        initialRegions[c.countryCode] = {
+        initialRegions[code] = {
           checked: true,
           indeterminate: false,
           provinces: [],
@@ -562,7 +621,8 @@ export default function ShippingDashboard() {
     });
     setModalSelectedRegions(initialRegions);
     setExpandedCountries(new Set());
-    setEditingZoneId(z.id);
+    setEditingZoneId(isBulkRule ? null : rule.deliveryZoneGid);
+    setEditingBulkRuleId(isBulkRule ? rule.id : null);
     setCountrySearch("");
     /* Close the EditRule modal first so the two modals don't stack. */
     setEditingRule(null);
@@ -571,16 +631,22 @@ export default function ShippingDashboard() {
 
   const handleZoneModalSave = useCallback(() => {
     const body = new FormData();
-    body.set("profileId", profileId);
-    body.set("locationGroupId", locationGroupId);
-    body.set("zoneName", modalZoneName);
     body.set("countryCodes", JSON.stringify(modalSelectedRegions));
 
-    if (zoneModalMode === "create") {
-      body.set("intent", "create_zone");
+    if (zoneModalMode === "edit-bulk") {
+      /* Bulk rules don't own a Shopify zone — we only rewrite ZoneRule.countries */
+      body.set("intent", "update_rule_coverage");
+      body.set("id", editingBulkRuleId);
     } else {
-      body.set("intent", "update_zone");
-      body.set("zoneId", editingZoneId);
+      body.set("profileId", profileId);
+      body.set("locationGroupId", locationGroupId);
+      body.set("zoneName", modalZoneName);
+      if (zoneModalMode === "create") {
+        body.set("intent", "create_zone");
+      } else {
+        body.set("intent", "update_zone");
+        body.set("zoneId", editingZoneId);
+      }
     }
 
     fetcher.submit(body, { method: "POST" });
@@ -593,6 +659,7 @@ export default function ShippingDashboard() {
     modalSelectedRegions,
     zoneModalMode,
     editingZoneId,
+    editingBulkRuleId,
   ]);
 
   /* ── Rule handlers ── */

@@ -263,13 +263,10 @@ export default function BulkEdit({ onToast, onApplied }) {
                 </InlineStack>
               </BlockStack>
             </Card>
-            {/* Result banners render below the upload card on the LEFT side
-                so feedback sits next to the action that produced it. */}
-            {renderResultBanners()}
           </BlockStack>
         </div>
 
-        {/* ── RIGHT column: docs pointer ── */}
+        {/* ── RIGHT column: docs pointer + result banners ── */}
         <div className="bulk-edit-split-col">
           <BlockStack gap="400">
             <Banner
@@ -286,6 +283,10 @@ export default function BulkEdit({ onToast, onApplied }) {
                 &amp; 3) — and lists every Logic # and country / zone code.
               </Text>
             </Banner>
+            {/* Upload result banners sit below the docs pointer so the right
+                column carries all the context, leaving the left column purely
+                for the download → upload workflow. */}
+            {renderResultBanners()}
           </BlockStack>
         </div>
       </div>

@@ -424,9 +424,8 @@ export default function EditRuleModal({
               <Text variant="headingSm" as="h3">{rule.name}</Text>
               <Text tone="subdued" variant="bodySm">{coverageSummary}</Text>
             </BlockStack>
-            {isBulkRule ? (
-              <Badge tone="info">From Excel upload</Badge>
-            ) : (
+            <InlineStack gap="200" blockAlign="center">
+              {isBulkRule && <Badge tone="info">From Excel upload</Badge>}
               <Button
                 variant="plain"
                 icon={EditIcon}
@@ -435,7 +434,7 @@ export default function EditRuleModal({
               >
                 Change countries
               </Button>
-            )}
+            </InlineStack>
           </InlineStack>
 
           {isBulkRule && (
@@ -445,10 +444,10 @@ export default function EditRuleModal({
               borderRadius="200"
             >
               <Text variant="bodySm" tone="subdued">
-                This rule came from the Excel template. To change which
-                countries it covers, download the spreadsheet from the{" "}
-                <b>Bulk edit (Excel)</b> tab, edit the Country / Zone rows,
-                and re-upload.
+                This rule came from the Excel template. You can change its
+                countries here for a quick edit, but re-uploading the
+                spreadsheet from the <b>Bulk edit (Excel)</b> tab will
+                overwrite this coverage with whatever the file says.
               </Text>
             </Box>
           )}

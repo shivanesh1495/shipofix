@@ -79,6 +79,32 @@ function summarizeCoverage(rule) {
   return `${fmt(parsed[0])} +${parsed.length - 1} more`;
 }
 
+/* Classify a rule's coverage against the store's billing country.
+   - domestic:      every covered country is the shop country (no provinces
+                    excluded — restOfWorld counts as international)
+   - international: no covered country is the shop country
+   - mixed:         the rule spans both the shop country and at least one
+                    foreign country (or Rest of World) */
+function classifyZoneType(rule, shopCountry) {
+  if (!shopCountry) return "international";
+  let parsed = [];
+  try {
+    parsed = JSON.parse(rule.countries || "[]");
+  } catch {
+    parsed = [];
+  }
+  if (parsed.length === 0) return "international";
+  const hasDomestic = parsed.some(
+    (c) => !c.restOfWorld && c.countryCode === shopCountry,
+  );
+  const hasForeign = parsed.some(
+    (c) => c.restOfWorld || (c.countryCode && c.countryCode !== shopCountry),
+  );
+  if (hasDomestic && hasForeign) return "mixed";
+  if (hasDomestic) return "domestic";
+  return "international";
+}
+
 /* Build the rate label shown in the View modal — "₹ 120 / kg", "5 bands",
    "0.1 of cart", etc. */
 function summarizeRate(rule) {
@@ -131,6 +157,9 @@ export default function RulesOverview({
   setFilterType,
   sortOrder,
   setSortOrder,
+  filterZoneType = "ALL",
+  setFilterZoneType = () => {},
+  shopCountry,
   onEditRule,
   onDeleteRule,
   onBulkDelete,
@@ -154,6 +183,12 @@ export default function RulesOverview({
       result = result.filter((r) => r.logicType === filterType);
     }
 
+    if (filterZoneType && filterZoneType !== "ALL") {
+      result = result.filter(
+        (r) => classifyZoneType(r, shopCountry) === filterZoneType,
+      );
+    }
+
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       result = result.filter((r) =>
@@ -169,7 +204,7 @@ export default function RulesOverview({
     }
 
     return result;
-  }, [rules, searchQuery, filterType, sortOrder]);
+  }, [rules, searchQuery, filterType, filterZoneType, shopCountry, sortOrder]);
 
   const viewingRule = useMemo(
     () => rules.find((r) => r.id === viewingRuleId) || null,
@@ -279,6 +314,20 @@ export default function RulesOverview({
                   onChange={setFilterType}
                 />
               </div>
+              <div className="ro-select">
+                <Select
+                  label="Zone type"
+                  labelHidden
+                  options={[
+                    { label: "All zone types", value: "ALL" },
+                    { label: "Domestic", value: "domestic" },
+                    { label: "International", value: "international" },
+                    { label: "Mixed", value: "mixed" },
+                  ]}
+                  value={filterZoneType}
+                  onChange={setFilterZoneType}
+                />
+              </div>
               <div className="ro-select ro-select--narrow">
                 <Select
                   label="Sort"
@@ -351,8 +400,8 @@ export default function RulesOverview({
             <div className="ro-table">
               <DataTable
                 columnContentTypes={isSelectMode
-                  ? ["text", "text", "text", "text", "text"]
-                  : ["text", "text", "text", "text"]}
+                  ? ["text", "text", "text", "text", "text", "text"]
+                  : ["text", "text", "text", "text", "text"]}
                 headings={[
                   ...(isSelectMode ? [
                     <Checkbox
@@ -366,6 +415,7 @@ export default function RulesOverview({
                   ] : []),
                   "Name",
                   "Coverage",
+                  "Zone type",
                   "Pricing model",
                   <div key="actions-h" style={{ textAlign: "right" }}>Actions</div>,
                 ]}
@@ -385,6 +435,20 @@ export default function RulesOverview({
                   <Text key={`c-${r.id}`} tone="subdued">
                     {summarizeCoverage(r)}
                   </Text>,
+                  (() => {
+                    const zt = classifyZoneType(r, shopCountry);
+                    const tone =
+                      zt === "domestic" ? "success"
+                      : zt === "international" ? "info"
+                      : "warning";
+                    const label =
+                      zt === "domestic" ? "Domestic"
+                      : zt === "international" ? "International"
+                      : "Mixed";
+                    return (
+                      <Badge key={`zt-${r.id}`} tone={tone}>{label}</Badge>
+                    );
+                  })(),
                   <InlineStack key={`l-${r.id}`} gap="150" blockAlign="center">
                     <Badge tone="info">
                       {LOGIC_SHORT_NAME[r.logicType] || r.logicType}
@@ -451,6 +515,7 @@ export default function RulesOverview({
                     onClick={() => {
                       setSearchQuery("");
                       setFilterType("ALL");
+                      setFilterZoneType("ALL");
                     }}
                   >
                     Reset filters

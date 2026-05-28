@@ -457,6 +457,7 @@ export default function ShippingDashboard() {
     rules,
     zones,
     carrierStatus,
+    shopCountry,
     profileId,
     locationGroupId,
   } = useLoaderData();
@@ -470,6 +471,7 @@ export default function ShippingDashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState("ALL");
   const [sortOrder, setSortOrder] = useState("NAME_ASC");
+  const [filterZoneType, setFilterZoneType] = useState("ALL");
 
   // ZoneModal state (create new zone OR change countries on an existing rule)
   const [zoneModalMode, setZoneModalMode] = useState(null);
@@ -749,6 +751,9 @@ export default function ShippingDashboard() {
                   setFilterType={setFilterType}
                   sortOrder={sortOrder}
                   setSortOrder={setSortOrder}
+                  filterZoneType={filterZoneType}
+                  setFilterZoneType={setFilterZoneType}
+                  shopCountry={shopCountry}
                   onEditRule={handleEditRule}
                   onDeleteRule={handleDeleteRule}
                   onBulkDelete={handleBulkDeleteRules}

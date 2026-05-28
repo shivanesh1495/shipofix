@@ -66,11 +66,11 @@ const LOGIC_TO_NUMBER = Object.fromEntries(
 );
 
 /* Flatten one BulkEditRule into spreadsheet rows for the Bulk Edit sheet.
-   Returns [leadingRow, ...coverageRows]. The leading row carries Name,
-   Logic # and Currency (and the default rate for non-range types). Coverage
-   rows just carry Country/Zone — plus an override rate when the rule has an
-   explicit per-destination override that differs from the default. */
-function buildZoneRowsFromRule(rule) {
+   Every emitted row carries the rule's Name, Logic #, Currency and Rate
+   alongside its Country / Zone — no separate leading row. Whole-country
+   coverage is expanded to one row per official province so the rule name
+   appears in front of every zone of that country. */
+function buildZoneRowsFromRule(rule, allCountriesByCode) {
   let parsedRules = {};
   try { parsedRules = JSON.parse(rule.rulesJson || "{}"); } catch { parsedRules = {}; }
   let parsedCountries = [];
@@ -96,45 +96,49 @@ function buildZoneRowsFromRule(rule) {
   }
 
   const logicNum = LOGIC_TO_NUMBER[rule.logicType] ?? "";
+  const currency = rule.currency || "USD";
+  const rateFor = (countryCode, provCode) => {
+    if (isRange) return "";
+    if (provCode) {
+      const k = `${countryCode}::${provCode}`;
+      if (overrideByKey.has(k)) return overrideByKey.get(k) ?? "";
+    }
+    const ck = `${countryCode}::`;
+    if (overrideByKey.has(ck)) return overrideByKey.get(ck) ?? "";
+    return defaultRate ?? "";
+  };
+
   const rows = [];
-  /* Leading row — country/zone left blank so this row acts as the "unbound"
-     default-rate entry on re-upload (buildNonRangeRate looks for a row with
-     no countryCode to seed the fallback rate). */
-  rows.push([
-    rule.name,
-    "",
-    "",
-    logicNum,
-    rule.currency || "USD",
-    isRange ? "" : (defaultRate ?? ""),
-  ]);
 
   for (const c of parsedCountries) {
     if (c.restOfWorld) {
-      rows.push(["", "Rest of World", "", "", "", ""]);
+      rows.push([rule.name, "Rest of World", "", logicNum, currency, rateFor("", "")]);
       continue;
     }
     const countryLabel = c.countryCode
       ? `${c.name || c.countryCode} (${c.countryCode})`
       : (c.name || "");
-    const provs = Array.isArray(c.provinces) ? c.provinces : [];
-    if (provs.length === 0) {
-      let rate = "";
-      if (!isRange) {
-        const ovr = overrideByKey.get(`${c.countryCode}::`);
-        if (ovr !== undefined && Number(ovr) !== Number(defaultRate)) rate = ovr;
+    const storedProvs = Array.isArray(c.provinces) ? c.provinces : [];
+
+    if (storedProvs.length === 0) {
+      /* Whole-country coverage — expand to one row per official province so
+         the rule name shows in front of every zone. Countries that have no
+         provinces in the official list emit a single country-level row. */
+      const officialProvs = allCountriesByCode?.get(c.countryCode)?.provinces || [];
+      if (officialProvs.length === 0) {
+        rows.push([rule.name, countryLabel, "", logicNum, currency, rateFor(c.countryCode, "")]);
+      } else {
+        for (const p of officialProvs) {
+          const provLabel =
+            p.code && p.name ? `${p.name} (${p.code})` : (p.name || p.code || "");
+          rows.push([rule.name, countryLabel, provLabel, logicNum, currency, rateFor(c.countryCode, p.code)]);
+        }
       }
-      rows.push(["", countryLabel, "", "", "", rate]);
     } else {
-      for (const p of provs) {
+      for (const p of storedProvs) {
         const provLabel =
           p.code && p.name ? `${p.name} (${p.code})` : (p.name || p.code || "");
-        let rate = "";
-        if (!isRange) {
-          const ovr = overrideByKey.get(`${c.countryCode}::${p.code}`);
-          if (ovr !== undefined && Number(ovr) !== Number(defaultRate)) rate = ovr;
-        }
-        rows.push(["", countryLabel, provLabel, "", "", rate]);
+        rows.push([rule.name, countryLabel, provLabel, logicNum, currency, rateFor(c.countryCode, p.code)]);
       }
     }
   }
@@ -373,7 +377,8 @@ async function patchBlobForRuleEdit({
 
 async function buildWorkbookFromBulkRules(rules) {
   const sortedRules = [...rules].sort((a, b) => a.name.localeCompare(b.name));
-  const zoneDataRows = sortedRules.flatMap((r) => buildZoneRowsFromRule(r));
+  const allCountriesByCode = new Map(ALL_COUNTRIES.map((c) => [c.code, c]));
+  const zoneDataRows = sortedRules.flatMap((r) => buildZoneRowsFromRule(r, allCountriesByCode));
   const bandDataRows = sortedRules.flatMap((r) => buildBandRowsFromRule(r));
 
   const wb = new ExcelJS.Workbook();
@@ -1842,6 +1847,71 @@ export const action = async ({ request }) => {
     /* Queue up — the commit phase below writes only if validation passes
        across the entire upload. */
     rulesToWrite.push({ gid, name, countries, logicType, rulesJson, currency });
+  }
+
+  /* ── Duplicate detection ─────────────────────────────────────────────
+     A bulk rule must not collide with an existing zone-wise (Shopify)
+     rule by name, and no two rules in the final ruleset (zone-wise +
+     uploaded bulk) may cover exactly the same set of zones. Coverage is
+     compared after expanding whole-country selections to their official
+     province list, so "whole India" and "all 36 Indian states listed
+     individually" count as the same coverage. */
+  const existingShopifyRules = await prisma.zoneRule.findMany({
+    where: { shop: shopDomain, source: "shopify" },
+  });
+  const allCountriesByCode = new Map(ALL_COUNTRIES.map((c) => [c.code, c]));
+
+  for (const r of rulesToWrite) {
+    const clash = existingShopifyRules.find(
+      (s) => s.name.trim().toLowerCase() === r.name.trim().toLowerCase(),
+    );
+    if (clash) {
+      summary.errors.push(
+        `Rule "${r.name}": a zone-wise rule with this name already exists. Rename the rule in the .xlsx (Names must be unique across zone-wise and bulk rules) and upload again.`,
+      );
+    }
+  }
+
+  const coverageKey = (countriesJsonString) => {
+    let arr;
+    try { arr = JSON.parse(countriesJsonString || "[]"); } catch { return ""; }
+    if (!Array.isArray(arr)) return "";
+    const pairs = new Set();
+    for (const c of arr) {
+      if (c.restOfWorld) { pairs.add("__ROW__"); continue; }
+      const cc = c.countryCode || "";
+      if (!cc) continue;
+      const stored = Array.isArray(c.provinces) ? c.provinces : [];
+      if (stored.length === 0) {
+        const official = allCountriesByCode.get(cc)?.provinces || [];
+        if (official.length === 0) {
+          pairs.add(`${cc}::`);
+        } else {
+          for (const p of official) pairs.add(`${cc}::${p.code}`);
+        }
+      } else {
+        for (const p of stored) pairs.add(`${cc}::${p.code}`);
+      }
+    }
+    return [...pairs].sort().join("|");
+  };
+
+  const keyToRule = new Map();
+  for (const s of existingShopifyRules) {
+    const k = coverageKey(s.countries);
+    if (k) keyToRule.set(k, { source: "zone-wise", name: s.name });
+  }
+  for (const r of rulesToWrite) {
+    const k = coverageKey(r.countries);
+    if (!k) continue;
+    const prior = keyToRule.get(k);
+    if (prior) {
+      summary.errors.push(
+        `Rule "${r.name}": covers the exact same zones as ${prior.source === "zone-wise" ? "zone-wise" : "bulk"} rule "${prior.name}". Two rules can't target identical coverage — adjust the Country/Zone cells or remove one of the rules.`,
+      );
+    } else {
+      keyToRule.set(k, { source: "bulk", name: r.name });
+    }
   }
 
   /* ── Validation gate ─────────────────────────────────────────────────

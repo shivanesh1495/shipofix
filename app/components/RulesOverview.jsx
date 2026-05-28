@@ -31,6 +31,7 @@ import {
 import {
   DeleteIcon,
   EditIcon,
+  ExportIcon,
   PackageIcon,
   PlusIcon,
   SearchIcon,
@@ -172,6 +173,35 @@ export default function RulesOverview({
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
+  /* Download every rule (zone-wise + Excel) as a single .xlsx in the same
+     shape as the Bulk Edit template — a teammate can re-upload it from the
+     Bulk edit (Excel) tab to mirror the rule set on another shop. */
+  const handleExportAll = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const res = await fetch("/app/bulk-edit?intent=export-all", {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error(`Server returned ${res.status}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "shipofix-rules-export.xlsx";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (_e) {
+      /* swallow — toast plumbing isn't available here; the most common
+         failure (no session) would have redirected before we got a blob. */
+    } finally {
+      setExporting(false);
+    }
+  };
 
   /* Filter + sort + search the rules into the order shown in the table.
      Search matches against name + coverage summary so vendors can hunt
@@ -361,6 +391,15 @@ export default function RulesOverview({
                 </>
               ) : (
                 <>
+                  <Button
+                    icon={ExportIcon}
+                    onClick={handleExportAll}
+                    disabled={rules.length === 0}
+                    loading={exporting}
+                    accessibilityLabel="Export every current rule as .xlsx"
+                  >
+                    Export rules
+                  </Button>
                   <Button
                     icon={DeleteIcon}
                     onClick={() => setIsSelectMode(true)}

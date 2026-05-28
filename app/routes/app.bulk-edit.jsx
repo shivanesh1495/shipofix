@@ -686,6 +686,29 @@ export const loader = async ({ request }) => {
     });
   }
 
+  /* Export every rule (bulk + zone-wise) as a freshly generated workbook in
+     the same shape as the template — so the vendor can hand the file to a
+     colleague, who can re-upload it to replicate the rules exactly. Rules
+     left on Shopify default (logicType = "DEFAULT") have no pricing yet, so
+     they're skipped — uploading them back would do nothing anyway. */
+  if (intent === "export-all") {
+    const { session } = await authenticate.admin(request);
+    const allRules = await prisma.zoneRule.findMany({
+      where: { shop: session.shop, logicType: { not: "DEFAULT" } },
+      orderBy: [{ name: "asc" }],
+    });
+    const buf = await buildWorkbookFromBulkRules(allRules);
+    return new Response(buf, {
+      status: 200,
+      headers: {
+        "Content-Type":
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Disposition": `attachment; filename="shipofix-rules-export.xlsx"`,
+        "Cache-Control": "no-store",
+      },
+    });
+  }
+
   if (intent !== "template") {
     return new Response("Not found", { status: 404 });
   }

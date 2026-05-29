@@ -77,6 +77,36 @@ const calculators = {
     };
   },
 
+  WEIGHT_RANGE_PER_KG(rules, totalKg /*, totalPrice */) {
+    const bands = Array.isArray(rules) ? rules : [];
+    const matchedBand = bands.find((b) => {
+      const min = parseFloat(b.min_kg || 0);
+      const max = parseOptionalMax(b.max_kg);
+      return totalKg >= min && totalKg <= max;
+    });
+
+    if (!matchedBand) {
+      return {
+        rate: null,
+        serviceName: "Weight Tiered Per-KG Shipping",
+        serviceCode: "weight_range_per_kg",
+        description: `No slab for ${totalKg.toFixed(2)}kg`,
+      };
+    }
+
+    const ratePerKg = parseFloat(matchedBand.rate_per_kg || 0);
+    const minKg = parseFloat(matchedBand.min_kg || 0);
+    const maxKg = parseOptionalMax(matchedBand.max_kg);
+    const maxLabel = maxKg === Infinity ? "+" : `–${maxKg}`;
+    const rate = totalKg * ratePerKg;
+    return {
+      rate,
+      serviceName: "Weight Tiered Per-KG Shipping",
+      serviceCode: "weight_range_per_kg",
+      description: `${totalKg.toFixed(2)}kg (slab ${minKg}${maxLabel}kg) × ${fmt(ratePerKg)}/kg = ${fmt(rate)}`,
+    };
+  },
+
   WEIGHT_MULTIPLIER(rules, totalKg /*, totalPrice */) {
     const ratePerKg = parseFloat(rules.rate_per_kg || 0);
     const rate = totalKg * ratePerKg;

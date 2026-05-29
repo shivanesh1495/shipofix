@@ -44,6 +44,7 @@ const LOGIC_TYPES = [
   { label: "Weight tiers", value: "WEIGHT_RANGE" },
   { label: "Order-value tiers", value: "PRICE_RANGE" },
   { label: "Per kilogram", value: "WEIGHT_MULTIPLIER" },
+  { label: "Weight tiers × per-kg", value: "WEIGHT_RANGE_PER_KG" },
   { label: "% of cart", value: "PRICE_MULTIPLIER" },
   { label: "Per item", value: "ITEM_MULTIPLIER" },
 ];

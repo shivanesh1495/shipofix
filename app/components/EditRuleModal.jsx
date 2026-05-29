@@ -28,6 +28,7 @@ const LOGIC_TYPES = [
   { label: "Weight tiers — different price per weight band", value: "WEIGHT_RANGE" },
   { label: "Order-value tiers — different price per cart total", value: "PRICE_RANGE" },
   { label: "Per kilogram — multiply weight × rate", value: "WEIGHT_MULTIPLIER" },
+  { label: "Weight tiers × per-kg rate — different per-kg rate per weight band", value: "WEIGHT_RANGE_PER_KG" },
   { label: "% of cart — charge a percentage of order value", value: "PRICE_MULTIPLIER" },
   { label: "Per item — multiply item count × rate", value: "ITEM_MULTIPLIER" },
 ];
@@ -41,6 +42,8 @@ const LOGIC_HELP = {
     "Set price bands by cart total. Useful for free-shipping thresholds (e.g. over 1,000 → 0).",
   WEIGHT_MULTIPLIER:
     "Cost scales with weight. A 3.5 kg cart at a rate of 20 charges 70.",
+  WEIGHT_RANGE_PER_KG:
+    "Set a per-kg rate per weight band. The cart's weight is multiplied by the matching band's rate. Example: 0–5 kg → 20/kg (3 kg → 60), 5–10 kg → 15/kg (7 kg → 105).",
   PRICE_MULTIPLIER:
     "Cost is a percentage of the cart. Enter the percent as a decimal — 0.1 = 10%.",
   ITEM_MULTIPLIER:
@@ -159,14 +162,16 @@ export default function EditRuleModal({
       case "ITEM_MULTIPLIER":
         return !positiveNumber(rules.rate_per_item);
       case "WEIGHT_RANGE":
-      case "PRICE_RANGE": {
-        const isWeight = logicType === "WEIGHT_RANGE";
+      case "PRICE_RANGE":
+      case "WEIGHT_RANGE_PER_KG": {
+        const isPrice = logicType === "PRICE_RANGE";
+        const rateKey = logicType === "WEIGHT_RANGE_PER_KG" ? "rate_per_kg" : "rate";
         const bands = Array.isArray(rules) ? rules : [];
         if (bands.length === 0) return true;
         return !bands.every((b) => {
-          const minRaw = isWeight ? b.min_kg : b.min_total;
-          const maxRaw = isWeight ? b.max_kg : b.max_total;
-          if (!positiveNumber(b.rate)) return false;
+          const minRaw = isPrice ? b.min_total : b.min_kg;
+          const maxRaw = isPrice ? b.max_total : b.max_kg;
+          if (!positiveNumber(b[rateKey])) return false;
           if (minRaw === "" || minRaw == null) return false;
           if (maxRaw === "" || maxRaw == null) return true;
           const minN = Number(minRaw);
@@ -208,19 +213,25 @@ export default function EditRuleModal({
         );
 
       case "WEIGHT_RANGE":
-      case "PRICE_RANGE": {
-        const isWeight = logicType === "WEIGHT_RANGE";
-        const defaultBand = isWeight
-          ? { min_kg: "", max_kg: null, rate: "" }
-          : { min_total: "", max_total: null, rate: "" };
+      case "PRICE_RANGE":
+      case "WEIGHT_RANGE_PER_KG": {
+        const isPrice = logicType === "PRICE_RANGE";
+        const isPerKg = logicType === "WEIGHT_RANGE_PER_KG";
+        const rateKey = isPerKg ? "rate_per_kg" : "rate";
+        const rateLabel = isPerKg ? "Price per kg" : "Price";
+        const defaultBand = isPrice
+          ? { min_total: "", max_total: null, rate: "" }
+          : isPerKg
+            ? { min_kg: "", max_kg: null, rate_per_kg: "" }
+            : { min_kg: "", max_kg: null, rate: "" };
         const bands =
           Array.isArray(rules) && rules.length > 0 ? rules : [defaultBand];
 
         return (
           <BlockStack gap="300">
             {bands.map((band, i) => {
-              const minVal = isWeight ? band.min_kg : band.min_total;
-              const maxVal = isWeight ? band.max_kg : band.max_total;
+              const minVal = isPrice ? band.min_total : band.min_kg;
+              const maxVal = isPrice ? band.max_total : band.max_kg;
               const minN = Number(minVal);
               const maxN = Number(maxVal);
               const overlap =
@@ -236,14 +247,14 @@ export default function EditRuleModal({
                   <InlineStack gap="200" blockAlign="end" wrap={false}>
                     <Box minWidth="100px">
                       <TextField
-                        label={isWeight ? "From (kg)" : "From (cart total)"}
+                        label={isPrice ? "From (cart total)" : "From (kg)"}
                         type="number"
                         min="0"
                         value={minVal ?? ""}
                         onChange={(v) => {
                           const next = [...bands];
-                          if (isWeight) next[i].min_kg = v;
-                          else next[i].min_total = v;
+                          if (isPrice) next[i].min_total = v;
+                          else next[i].min_kg = v;
                           setRules(next);
                         }}
                         autoComplete="off"
@@ -251,14 +262,14 @@ export default function EditRuleModal({
                     </Box>
                     <Box minWidth="100px">
                       <TextField
-                        label={isWeight ? "Up to (kg)" : "Up to (cart total)"}
+                        label={isPrice ? "Up to (cart total)" : "Up to (kg)"}
                         type="number"
                         min="0"
                         value={maxVal ?? ""}
                         onChange={(v) => {
                           const next = [...bands];
-                          if (isWeight) next[i].max_kg = v === "" ? null : v;
-                          else next[i].max_total = v === "" ? null : v;
+                          if (isPrice) next[i].max_total = v === "" ? null : v;
+                          else next[i].max_kg = v === "" ? null : v;
                           setRules(next);
                         }}
                         autoComplete="off"
@@ -267,17 +278,18 @@ export default function EditRuleModal({
                     </Box>
                     <Box minWidth="100px">
                       <TextField
-                        label="Price"
+                        label={rateLabel}
                         type="number"
                         min="0"
-                        value={band.rate ?? ""}
+                        value={band[rateKey] ?? ""}
                         onChange={(v) => {
                           const next = [...bands];
-                          next[i].rate = v;
+                          next[i][rateKey] = v;
                           setRules(next);
                         }}
                         autoComplete="off"
                         prefix={currency}
+                        suffix={isPerKg ? "/ kg" : undefined}
                       />
                     </Box>
                     <Button
@@ -304,9 +316,11 @@ export default function EditRuleModal({
                 onClick={() =>
                   setRules([
                     ...bands,
-                    isWeight
-                      ? { min_kg: "", max_kg: null, rate: "" }
-                      : { min_total: "", max_total: null, rate: "" },
+                    isPrice
+                      ? { min_total: "", max_total: null, rate: "" }
+                      : isPerKg
+                        ? { min_kg: "", max_kg: null, rate_per_kg: "" }
+                        : { min_kg: "", max_kg: null, rate: "" },
                   ])
                 }
               >
@@ -480,6 +494,7 @@ export default function EditRuleModal({
                  form doesn't carry stale fields from the previous model. */
               if (v === "WEIGHT_RANGE") setRules([{ min_kg: "", max_kg: null, rate: "" }]);
               else if (v === "PRICE_RANGE") setRules([{ min_total: "", max_total: null, rate: "" }]);
+              else if (v === "WEIGHT_RANGE_PER_KG") setRules([{ min_kg: "", max_kg: null, rate_per_kg: "" }]);
               else setRules({});
             }}
           />

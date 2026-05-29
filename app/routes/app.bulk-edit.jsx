@@ -59,6 +59,7 @@ const LOGIC_BY_NUMBER = {
   4: "WEIGHT_MULTIPLIER",
   5: "PRICE_MULTIPLIER",
   6: "ITEM_MULTIPLIER",
+  7: "WEIGHT_RANGE_PER_KG",
 };
 
 const LOGIC_TO_NUMBER = Object.fromEntries(
@@ -77,7 +78,9 @@ function buildZoneRowsFromRule(rule, allCountriesByCode) {
   try { parsedCountries = JSON.parse(rule.countries || "[]"); } catch { parsedCountries = []; }
 
   const isRange =
-    rule.logicType === "WEIGHT_RANGE" || rule.logicType === "PRICE_RANGE";
+    rule.logicType === "WEIGHT_RANGE" ||
+    rule.logicType === "PRICE_RANGE" ||
+    rule.logicType === "WEIGHT_RANGE_PER_KG";
 
   let defaultRate = null;
   const overrideByKey = new Map();
@@ -149,19 +152,25 @@ function buildZoneRowsFromRule(rule, allCountriesByCode) {
 /* Flatten one BulkEditRule's bands into Rate Bands sheet rows. Only Logic 2 / 3
    rules contribute; everything else returns []. */
 function buildBandRowsFromRule(rule) {
-  if (rule.logicType !== "WEIGHT_RANGE" && rule.logicType !== "PRICE_RANGE") {
+  if (
+    rule.logicType !== "WEIGHT_RANGE" &&
+    rule.logicType !== "PRICE_RANGE" &&
+    rule.logicType !== "WEIGHT_RANGE_PER_KG"
+  ) {
     return [];
   }
   let parsed = [];
   try { parsed = JSON.parse(rule.rulesJson || "[]"); } catch { parsed = []; }
   if (!Array.isArray(parsed)) return [];
-  const minKey = rule.logicType === "WEIGHT_RANGE" ? "min_kg" : "min_total";
-  const maxKey = rule.logicType === "WEIGHT_RANGE" ? "max_kg" : "max_total";
+  const isPrice = rule.logicType === "PRICE_RANGE";
+  const minKey = isPrice ? "min_total" : "min_kg";
+  const maxKey = isPrice ? "max_total" : "max_kg";
+  const rateKey = rule.logicType === "WEIGHT_RANGE_PER_KG" ? "rate_per_kg" : "rate";
   return parsed.map((b) => [
     rule.name,
     b[minKey] ?? "",
     b[maxKey] ?? "",
-    b.rate ?? "",
+    b[rateKey] ?? "",
   ]);
 }
 
@@ -283,7 +292,10 @@ async function patchBlobForRuleEdit({
   /* 3. Rate — depends on logic family. Range types (2/3) read rates from
      Rate Bands sheet; everything else reads the rule's default rate from
      the Bulk Edit Rate column. */
-  const isRange = logicType === "WEIGHT_RANGE" || logicType === "PRICE_RANGE";
+  const isRange =
+    logicType === "WEIGHT_RANGE" ||
+    logicType === "PRICE_RANGE" ||
+    logicType === "WEIGHT_RANGE_PER_KG";
 
   if (isRange) {
     if (!wsBands) return null;
@@ -296,8 +308,10 @@ async function patchBlobForRuleEdit({
       }
     });
     const newBands = Array.isArray(parsedNewRules) ? parsedNewRules : [];
-    const minKey = logicType === "WEIGHT_RANGE" ? "min_kg" : "min_total";
-    const maxKey = logicType === "WEIGHT_RANGE" ? "max_kg" : "max_total";
+    const isPrice = logicType === "PRICE_RANGE";
+    const minKey = isPrice ? "min_total" : "min_kg";
+    const maxKey = isPrice ? "max_total" : "max_kg";
+    const rateKey = logicType === "WEIGHT_RANGE_PER_KG" ? "rate_per_kg" : "rate";
 
     /* Reuse the rule's existing band rows where we can — preserves their
        row position, formatting and any neighbouring vendor comments. Any
@@ -311,7 +325,7 @@ async function patchBlobForRuleEdit({
         wsBands.getCell(rn, BAND_MIN_COL).value = b[minKey] ?? 0;
         wsBands.getCell(rn, BAND_MAX_COL).value =
           b[maxKey] !== undefined && b[maxKey] !== null ? b[maxKey] : "";
-        wsBands.getCell(rn, BAND_RATE_COL).value = b.rate;
+        wsBands.getCell(rn, BAND_RATE_COL).value = b[rateKey];
       } else {
         wsBands.getCell(rn, BAND_NAME_COL).value = "";
         wsBands.getCell(rn, BAND_MIN_COL).value = "";
@@ -325,7 +339,7 @@ async function patchBlobForRuleEdit({
         targetName,
         b[minKey] ?? 0,
         b[maxKey] !== undefined && b[maxKey] !== null ? b[maxKey] : "",
-        b.rate,
+        b[rateKey],
       ]);
     }
   } else {
@@ -413,7 +427,7 @@ async function buildWorkbookFromBulkRules(rules) {
     rules: [
       {
         type: "expression",
-        formulae: ["OR($D2=2,$D2=3)"],
+        formulae: ["OR($D2=2,$D2=3,$D2=7)"],
         priority: 1,
         style: {
           fill: { type: "pattern", pattern: "solid", bgColor: { argb: "FFFFE5E5" } },
@@ -451,6 +465,7 @@ const LOGIC_LABELS = {
   WEIGHT_MULTIPLIER: "Per KG Dynamic",
   PRICE_MULTIPLIER: "Per Price Dynamic",
   ITEM_MULTIPLIER: "Per Item Dynamic",
+  WEIGHT_RANGE_PER_KG: "Weight Tiered Per-KG",
 };
 
 const TEMPLATE_HEADERS = [
@@ -474,26 +489,26 @@ const INSTRUCTIONS_ROWS = [
   ["1. Coverage  → on the 'Bulk Edit' sheet, mark which countries / zones a rule covers by typing the rule Name in column A."],
   ["2. Logic     → on that same first row of the rule, set Logic # and Currency."],
   ["3. Rate      → for Logic 1, 4, 5, 6 put the rate in the Rate column on the Bulk Edit sheet."],
-  ["               for Logic 2 & 3 (category slabs) the rate lives on the dedicated 'Rate Bands' sheet — one row per band, same Name."],
+  ["               for Logic 2, 3 & 7 (category slabs) the rate lives on the dedicated 'Rate Bands' sheet — one row per band, same Name."],
   ["4. Save the file and upload it back into the Bulk Edit panel."],
   [],
   ["'Bulk Edit' sheet columns"],
   ["• Name      — free-form rule name. Rows sharing a Name merge into ONE rule (coverage = union of their Country / Zone)."],
   ["• Country   — country this row applies to (dropdown; pre-filled reference)."],
   ["• Zone      — state / province / division (dropdown; blank = whole country)."],
-  ["• Logic #   — 1-6 picks the rate model, 0 = reset to Shopify Default, blank = no change."],
+  ["• Logic #   — 1-7 picks the rate model, 0 = reset to Shopify Default, blank = no change."],
   ["• Currency  — ISO code (e.g. USD, EUR, GBP). Defaults to USD if blank."],
-  ["• Rate      — Logic 1 (flat) / 4 (per kg) / 5 (decimal %, e.g. 0.1) / 6 (per item). LEAVE BLANK for Logic 2 & 3 — those rates come from the Rate Bands sheet."],
+  ["• Rate      — Logic 1 (flat) / 4 (per kg) / 5 (decimal %, e.g. 0.1) / 6 (per item). LEAVE BLANK for Logic 2, 3 & 7 — those rates come from the Rate Bands sheet."],
   [],
-  ["'Rate Bands' sheet — REQUIRED for Logic 2 & 3"],
-  ["• Each row is ONE band of a rule. Logic 2 & 3 rules with no rows on this sheet will be REJECTED on upload."],
+  ["'Rate Bands' sheet — REQUIRED for Logic 2, 3 & 7"],
+  ["• Each row is ONE band of a rule. Logic 2, 3 & 7 rules with no rows on this sheet will be REJECTED on upload."],
   ["• Name   — must match the rule Name used on the Bulk Edit sheet (case-sensitive)."],
   ["• Min    — lower bound of the band. Leave blank to mean 0."],
   ["• Max    — upper bound. Leave blank for the open-ended top band (= ∞)."],
-  ["• Rate   — flat amount charged when the cart falls inside this band."],
+  ["• Rate   — Logic 2 & 3: flat amount charged when the cart falls inside this band. Logic 7: per-kg rate (final charge = cart weight × this rate)."],
   ["• Add as many rows as you need per rule. Order doesn't matter — the carrier picks the matching band by Min ≤ value < Max."],
-  ["• Logic 2 reads the cart's total weight in kg. Logic 3 reads the cart total in the rule's currency."],
-  ["• Edge cases: rows without a Rate are dropped. Bands assigned to a Name that has no Logic 2 / 3 rule on Bulk Edit are ignored."],
+  ["• Logic 2 & 7 read the cart's total weight in kg. Logic 3 reads the cart total in the rule's currency."],
+  ["• Edge cases: rows without a Rate are dropped. Bands assigned to a Name that has no Logic 2 / 3 / 7 rule on Bulk Edit are ignored."],
   [],
   ["Examples"],
   ["Logic 1 (Flat) — single row on Bulk Edit, Rate filled:"],
@@ -508,6 +523,16 @@ const INSTRUCTIONS_ROWS = [
   ["", "Weight AU", 5, 10, 80],
   ["", "Weight AU", 10, "", 120],
   [],
+  ["Logic 7 (Weight tiered per-kg) — bands hold a PER-KG rate, charged as weight × rate:"],
+  ["Bulk Edit row:"],
+  ["", "Tiered AU", "Australia (AU)", "", 7, "AUD", ""],
+  ["Rate Bands rows for the same Name (Rate column is per-kg, not flat):"],
+  ["", "Name", "Min", "Max", "Rate (per kg)"],
+  ["", "Tiered AU", 0, 5, 20],
+  ["", "Tiered AU", 5, 10, 15],
+  ["", "Tiered AU", 10, "", 10],
+  ["A 7 kg cart hits the 5-10 band → 7 × 15 = 105."],
+  [],
   ["Logic # reference"],
   ["#", "Logic Type", "Where to put the rate", "Notes"],
   [1, "Standard Flat Tier", "Bulk Edit · Rate column", "One row per zone."],
@@ -516,6 +541,7 @@ const INSTRUCTIONS_ROWS = [
   [4, "Per KG Dynamic", "Bulk Edit · Rate column", "Rate per kg."],
   [5, "Per Price Dynamic", "Bulk Edit · Rate column", "Decimal fraction (0.1 = 10%)."],
   [6, "Per Item Dynamic", "Bulk Edit · Rate column", "Rate per item."],
+  [7, "Weight Tiered Per-KG", "Rate Bands sheet (one row per slab)", "Min / Max are kg. Rate column is per-kg. Charge = cart weight × matching band's rate."],
   [],
   ["Notes"],
   ["• Uploading replaces every existing bulk-edit rule for the shop — rules you leave out are reset to Shopify Default."],
@@ -804,11 +830,11 @@ export const loader = async ({ request }) => {
   wsZones.getCell("C1").note =
     "State / province / division (optional). Pick from the dropdown, or leave blank to apply to the whole country.";
   wsZones.getCell("D1").note =
-    "1 = Standard Flat Tier · 2 = Weight Based (use Rate Bands) · 3 = Price Based (use Rate Bands) · 4 = Per KG · 5 = Per Price (decimal %, e.g. 0.1) · 6 = Per Item. 0 = reset to Shopify Default. Blank = keep existing rule.";
+    "1 = Standard Flat Tier · 2 = Weight Based (use Rate Bands) · 3 = Price Based (use Rate Bands) · 4 = Per KG · 5 = Per Price (decimal %, e.g. 0.1) · 6 = Per Item · 7 = Weight Tiered Per-KG (use Rate Bands; Rate column is per-kg). 0 = reset to Shopify Default. Blank = keep existing rule.";
   wsZones.getCell("E1").note =
     "ISO currency code (e.g. USD, EUR, GBP, AUD). Defaults to USD if blank. Set once on the rule's first row.";
   wsZones.getCell("F1").note =
-    "Rate amount for Logic 1, 4, 5, 6. LEAVE BLANK for Logic 2 & 3 — those rates come from the Rate Bands sheet.";
+    "Rate amount for Logic 1, 4, 5, 6. LEAVE BLANK for Logic 2, 3 & 7 — those rates come from the Rate Bands sheet.";
 
   /* Conditional formatting: when Logic # is 2 or 3 on the same row, paint the
      Rate cell pink so vendors immediately see they shouldn't fill it. */
@@ -818,7 +844,7 @@ export const loader = async ({ request }) => {
     rules: [
       {
         type: "expression",
-        formulae: ["OR($D2=2,$D2=3)"],
+        formulae: ["OR($D2=2,$D2=3,$D2=7)"],
         priority: 1,
         style: {
           fill: {
@@ -857,11 +883,11 @@ export const loader = async ({ request }) => {
   wsBands.getCell("A1").note =
     "Must EXACTLY match a Name on the Bulk Edit sheet (case-sensitive). Orphan names — bands whose Name doesn't appear on Bulk Edit — are rejected on upload.";
   wsBands.getCell("B1").note =
-    "Lower bound of this band. Leave blank to mean 0. For Logic 2 this is kg; for Logic 3 it's cart total in the rule's currency.";
+    "Lower bound of this band. Leave blank to mean 0. For Logic 2 & 7 this is kg; for Logic 3 it's cart total in the rule's currency.";
   wsBands.getCell("C1").note =
     "Upper bound of this band. Leave BLANK on the top band for the open-ended range (= ∞). Must be greater than Min.";
   wsBands.getCell("D1").note =
-    "Flat amount charged when the cart falls inside this band.";
+    "Logic 2 & 3: flat amount charged when the cart falls inside this band. Logic 7: per-kg rate (final charge = cart weight × this rate).";
   /* 100 blank rows so vendors can paste large band sets without resizing */
   for (let i = 0; i < 100; i++) {
     wsBands.addRow(["", "", "", ""]);
@@ -1000,11 +1026,11 @@ export const loader = async ({ request }) => {
     wsZones.getCell(`D${r}`).dataValidation = {
       type: "list",
       allowBlank: true,
-      formulae: ['"0,1,2,3,4,5,6"'],
+      formulae: ['"0,1,2,3,4,5,6,7"'],
       showErrorMessage: true,
       errorStyle: "stop",
       errorTitle: "Invalid Logic #",
-      error: "Logic # must be 1-6 (or 0 to reset the zone). Leave blank to keep the existing rule.",
+      error: "Logic # must be 1-7 (or 0 to reset the zone). Leave blank to keep the existing rule.",
     };
     /* Currency (column E): ISO 4217 dropdown. errorStyle 'stop' blocks
        free-text typos like "USC" — the user must pick a real currency code
@@ -1028,13 +1054,13 @@ export const loader = async ({ request }) => {
       type: "custom",
       allowBlank: true,
       formulae: [
-        `=IF(OR($D${r}=2,$D${r}=3),FALSE,AND(ISNUMBER(F${r}),F${r}>=0))`,
+        `=IF(OR($D${r}=2,$D${r}=3,$D${r}=7),FALSE,AND(ISNUMBER(F${r}),F${r}>=0))`,
       ],
       showErrorMessage: true,
       errorStyle: "stop",
       errorTitle: "Rate not allowed here",
       error:
-        "Logic 2 & 3 (category-based) read rates from the 'Rate Bands' sheet — leave Rate BLANK on this sheet for those rules. For Logic 1, 4, 5, 6 enter a non-negative number.",
+        "Logic 2, 3 & 7 (category-based) read rates from the 'Rate Bands' sheet — leave Rate BLANK on this sheet for those rules. For Logic 1, 4, 5, 6 enter a non-negative number.",
     };
   }
 
@@ -1108,7 +1134,9 @@ export const action = async ({ request }) => {
        (range). Per-destination overrides are preserved from the existing
        rulesJson so an inline edit doesn't silently drop them. */
     const isRange =
-      existing.logicType === "WEIGHT_RANGE" || existing.logicType === "PRICE_RANGE";
+      existing.logicType === "WEIGHT_RANGE" ||
+      existing.logicType === "PRICE_RANGE" ||
+      existing.logicType === "WEIGHT_RANGE_PER_KG";
 
     const num = (v) => {
       if (v === "" || v === null || v === undefined) return null;
@@ -1122,14 +1150,17 @@ export const action = async ({ request }) => {
       if (incoming.length === 0) {
         return { success: false, error: "At least one band is required." };
       }
-      const minKey = existing.logicType === "WEIGHT_RANGE" ? "min_kg" : "min_total";
-      const maxKey = existing.logicType === "WEIGHT_RANGE" ? "max_kg" : "max_total";
+      const isPrice = existing.logicType === "PRICE_RANGE";
+      const minKey = isPrice ? "min_total" : "min_kg";
+      const maxKey = isPrice ? "max_total" : "max_kg";
+      const rateKey =
+        existing.logicType === "WEIGHT_RANGE_PER_KG" ? "rate_per_kg" : "rate";
       const bands = [];
       for (let i = 0; i < incoming.length; i++) {
         const b = incoming[i] || {};
         const min = num(b[minKey] ?? b.min);
         const max = num(b[maxKey] ?? b.max);
-        const rate = num(b.rate);
+        const rate = num(b[rateKey]);
         if (rate === null || rate < 0) {
           return { success: false, error: `Band ${i + 1}: rate must be a non-negative number.` };
         }
@@ -1145,7 +1176,7 @@ export const action = async ({ request }) => {
             error: `Band ${i + 1}: min (${min}) must be less than max (${max}).`,
           };
         }
-        const entry = { [minKey]: min ?? 0, rate };
+        const entry = { [minKey]: min ?? 0, [rateKey]: rate };
         if (max !== null) entry[maxKey] = max;
         bands.push(entry);
       }
@@ -1629,7 +1660,7 @@ export const action = async ({ request }) => {
     const logicType = LOGIC_BY_NUMBER[logicNum];
     if (!logicType) {
       summary.errors.push(
-        `Rule "${name}": Logic # ${logicNum} is not a valid type (use 1-6, or 0 to reset).`,
+        `Rule "${name}": Logic # ${logicNum} is not a valid type (use 1-7, or 0 to reset).`,
       );
       continue;
     }
@@ -1652,10 +1683,13 @@ export const action = async ({ request }) => {
        sheets is almost always a vendor mistake (often: Logic # flipped to
        2 / 3 after Rate was already typed). Excel-side validation blocks
        the typical entry path; this is the belt-and-braces server check. */
-    const isRangeLogic = logicType === "WEIGHT_RANGE" || logicType === "PRICE_RANGE";
+    const isRangeLogic =
+      logicType === "WEIGHT_RANGE" ||
+      logicType === "PRICE_RANGE" ||
+      logicType === "WEIGHT_RANGE_PER_KG";
     if (isRangeLogic && g.rateRows.length > 0) {
       summary.errors.push(
-        `Rule "${name}" (Logic ${logicNum}): the Rate column on the Bulk Edit sheet is filled but Logic 2 & 3 are category-based — their rates live on the Rate Bands sheet only. Clear the Rate cell on every Bulk Edit row for this rule.`,
+        `Rule "${name}" (Logic ${logicNum}): the Rate column on the Bulk Edit sheet is filled but Logic 2, 3 & 7 are category-based — their rates live on the Rate Bands sheet only. Clear the Rate cell on every Bulk Edit row for this rule.`,
       );
       continue;
     }
@@ -1809,6 +1843,32 @@ export const action = async ({ request }) => {
       );
       for (const issue of issues) {
         summary.warnings.push(`Rule "${name}" (Logic 3): ${issue}`);
+      }
+      rulesJson = JSON.stringify(bands);
+    } else if (logicType === "WEIGHT_RANGE_PER_KG") {
+      if (g.bands.length === 0) {
+        summary.errors.push(`Rule "${name}" (Logic 7 · Weight Tiered Per-KG): no entries on the Rate Bands sheet. Logic 7 requires at least one row on Rate Bands with Name "${name}".`);
+        continue;
+      }
+      const bands = g.bands
+        .map((b) => {
+          const min = num(b.min);
+          const max = num(b.max);
+          const rate = num(b.rate);
+          if (rate === null) return null;
+          return { min_kg: min ?? 0, max_kg: max, rate_per_kg: rate };
+        })
+        .filter(Boolean);
+      if (bands.length === 0) {
+        summary.errors.push(`Rule "${name}" (Logic 7 · Weight Tiered Per-KG): every Rate Bands row for this rule is missing a numeric Rate. Fill the Rate column on at least one row.`);
+        continue;
+      }
+      const issues = describeBandIssues(
+        bands.map((b) => ({ min: b.min_kg, max: b.max_kg })),
+        "kg",
+      );
+      for (const issue of issues) {
+        summary.warnings.push(`Rule "${name}" (Logic 7): ${issue}`);
       }
       rulesJson = JSON.stringify(bands);
     } else if (logicType === "WEIGHT_MULTIPLIER") {

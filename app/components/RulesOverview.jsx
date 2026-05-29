@@ -117,7 +117,9 @@ function summarizeRate(rule) {
     parsed = {};
   }
   const isRange =
-    rule.logicType === "WEIGHT_RANGE" || rule.logicType === "PRICE_RANGE";
+    rule.logicType === "WEIGHT_RANGE" ||
+    rule.logicType === "PRICE_RANGE" ||
+    rule.logicType === "WEIGHT_RANGE_PER_KG";
   if (isRange) {
     const bands = Array.isArray(parsed) ? parsed : [];
     return `${bands.length} band${bands.length === 1 ? "" : "s"}`;
@@ -616,7 +618,8 @@ export default function RulesOverview({
 
               {/* Range type? show the band list */}
               {(viewingRule.logicType === "WEIGHT_RANGE" ||
-                viewingRule.logicType === "PRICE_RANGE") && (
+                viewingRule.logicType === "PRICE_RANGE" ||
+                viewingRule.logicType === "WEIGHT_RANGE_PER_KG") && (
                 <BlockStack gap="200">
                   <Text variant="headingSm" as="h3">Bands</Text>
                   {(() => {
@@ -626,9 +629,15 @@ export default function RulesOverview({
                     if (bands.length === 0) {
                       return <Text tone="subdued">No bands defined.</Text>;
                     }
-                    const minKey = viewingRule.logicType === "WEIGHT_RANGE" ? "min_kg" : "min_total";
-                    const maxKey = viewingRule.logicType === "WEIGHT_RANGE" ? "max_kg" : "max_total";
-                    const unit = viewingRule.logicType === "WEIGHT_RANGE" ? "kg" : viewingRule.currency;
+                    const isPrice = viewingRule.logicType === "PRICE_RANGE";
+                    const isPerKg = viewingRule.logicType === "WEIGHT_RANGE_PER_KG";
+                    const minKey = isPrice ? "min_total" : "min_kg";
+                    const maxKey = isPrice ? "max_total" : "max_kg";
+                    const unit = isPrice ? viewingRule.currency : "kg";
+                    const rateKey = isPerKg ? "rate_per_kg" : "rate";
+                    const rateSuffix = isPerKg
+                      ? `${viewingRule.currency} / kg`
+                      : viewingRule.currency;
                     return (
                       <BlockStack gap="100">
                         {bands.map((b, i) => (
@@ -638,7 +647,7 @@ export default function RulesOverview({
                               {b[maxKey] != null ? `${b[maxKey]} ${unit}` : "∞"}
                             </Text>
                             <Text fontWeight="semibold">
-                              {b.rate} {viewingRule.currency}
+                              {b[rateKey]} {rateSuffix}
                             </Text>
                           </InlineStack>
                         ))}

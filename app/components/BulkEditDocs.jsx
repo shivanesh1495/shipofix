@@ -71,6 +71,14 @@ const LOGIC_REFERENCE = [
     example: "Rate = 15 · 4 items → 60",
     use: "Charge proportional to item count.",
   },
+  {
+    num: 7,
+    label: "Weight Tiered Per-KG",
+    rateSource: "Rate Bands sheet",
+    unit: "Per-kg rate, banded by weight (kg)",
+    example: "0–5 → 20/kg · 5–10 → 15/kg · 7 kg cart → 7 × 15 = 105",
+    use: "Different per-kg rate inside each weight band. Combines weight tiers with a per-kg multiplier.",
+  },
 ];
 
 const BULK_EDIT_COLUMNS = [
@@ -92,7 +100,7 @@ const BULK_EDIT_COLUMNS = [
   {
     col: "Logic #",
     required: "First row of each rule",
-    body: "1–6 picks the pricing model. 0 resets the rule to Shopify Default. Blank leaves the existing rule untouched.",
+    body: "1–7 picks the pricing model. 0 resets the rule to Shopify Default. Blank leaves the existing rule untouched.",
   },
   {
     col: "Currency",
@@ -102,7 +110,7 @@ const BULK_EDIT_COLUMNS = [
   {
     col: "Rate",
     required: "Logic 1, 4, 5, 6",
-    body: "Numeric rate in the chosen currency. Leave blank for Logic 2 / 3 — those rules read from Rate Bands.",
+    body: "Numeric rate in the chosen currency. Leave blank for Logic 2, 3 & 7 — those rules read from Rate Bands.",
   },
 ];
 
@@ -125,7 +133,7 @@ const RATE_BANDS_COLUMNS = [
   {
     col: "Rate",
     required: "Always",
-    body: "Flat amount charged when an order falls in this band. Blank rows are dropped.",
+    body: "Logic 2 & 3: flat amount charged when an order falls in this band. Logic 7: per-kg rate inside this band (final charge = cart weight × this rate). Blank rows are dropped.",
   },
 ];
 
@@ -233,7 +241,7 @@ export default function BulkEditDocs({ open, onClose }) {
               <div className="bulk-docs-sheet">
                 <div className="bulk-docs-sheet-title">
                   Rate Bands
-                  <span className="bulk-docs-sheet-tag bulk-docs-sheet-tag--edit">Edit (Logic 2 &amp; 3)</span>
+                  <span className="bulk-docs-sheet-tag bulk-docs-sheet-tag--edit">Edit (Logic 2, 3 &amp; 7)</span>
                 </div>
                 <div className="bulk-docs-sheet-body">
                   Slabs for category logic. One row per band, all sharing the
@@ -281,7 +289,7 @@ export default function BulkEditDocs({ open, onClose }) {
               </li>
               <li>
                 <b>Pick a Logic #.</b> On the <i>first</i> row of each rule, set
-                Logic # (1–6). Use 0 to reset that rule to Shopify Default,
+                Logic # (1–7). Use 0 to reset that rule to Shopify Default,
                 blank to leave the existing rule alone.
               </li>
               <li>
@@ -294,14 +302,16 @@ export default function BulkEditDocs({ open, onClose }) {
                   <li>
                     Logic <b>1, 4, 5, 6</b> — put the value in the Rate column
                     on the Bulk Edit sheet. Leave the Rate column blank for
-                    Logic 2 &amp; 3 rules.
+                    Logic 2, 3 &amp; 7 rules.
                   </li>
                   <li>
-                    Logic <b>2, 3</b> — switch to the <b>Rate Bands</b> sheet
-                    and add one row per slab (Name, Min, Max, Rate).{" "}
-                    <b>Required:</b> upload is rejected if a Logic 2 / 3 rule
-                    has no Rate Bands rows. Order doesn&apos;t matter; the
-                    carrier picks the matching band.
+                    Logic <b>2, 3, 7</b> — switch to the <b>Rate Bands</b>{" "}
+                    sheet and add one row per slab (Name, Min, Max, Rate).{" "}
+                    <b>Required:</b> upload is rejected if a Logic 2 / 3 / 7
+                    rule has no Rate Bands rows. Order doesn&apos;t matter; the
+                    carrier picks the matching band. For Logic 7 the Rate
+                    column is a <i>per-kg</i> rate (final charge = cart weight
+                    × the matching band&apos;s rate).
                   </li>
                 </ul>
               </li>
@@ -530,6 +540,96 @@ export default function BulkEditDocs({ open, onClose }) {
                 </div>
               </BlockStack>
             </Box>
+
+            <Text variant="headingMd" as="h3">
+              Worked example · Weight Tiered Per-KG (Logic 7)
+            </Text>
+            <Text tone="subdued">
+              Same shape as Logic 2, but the Rate column on Rate Bands is a{" "}
+              <i>per-kg</i> rate. Final charge = cart weight × the matching
+              band&apos;s rate. A 7 kg cart with the bands below lands in the
+              5–10 band: <b>7 × 15 = 105</b>.
+            </Text>
+
+            <Box
+              padding="300"
+              background="bg-surface-secondary"
+              borderRadius="200"
+            >
+              <BlockStack gap="200">
+                <Text fontWeight="semibold" variant="bodySm">
+                  Bulk Edit sheet
+                </Text>
+                <div className="bulk-docs-table-wrap">
+                  <table className="bulk-docs-table">
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Country</th>
+                        <th>Zone</th>
+                        <th>Logic #</th>
+                        <th>Currency</th>
+                        <th>Rate</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>Tiered AU</td>
+                        <td>Australia (AU)</td>
+                        <td>Australian Capital Territory (ACT)</td>
+                        <td>7</td>
+                        <td>AUD</td>
+                        <td className="bulk-docs-muted">—</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </BlockStack>
+            </Box>
+
+            <Box
+              padding="300"
+              background="bg-surface-secondary"
+              borderRadius="200"
+            >
+              <BlockStack gap="200">
+                <Text fontWeight="semibold" variant="bodySm">
+                  Rate Bands sheet (Rate column is per-kg)
+                </Text>
+                <div className="bulk-docs-table-wrap">
+                  <table className="bulk-docs-table">
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Min</th>
+                        <th>Max</th>
+                        <th>Rate (per kg)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>Tiered AU</td>
+                        <td>0</td>
+                        <td>5</td>
+                        <td>20</td>
+                      </tr>
+                      <tr>
+                        <td>Tiered AU</td>
+                        <td>5</td>
+                        <td>10</td>
+                        <td>15</td>
+                      </tr>
+                      <tr>
+                        <td>Tiered AU</td>
+                        <td>10</td>
+                        <td className="bulk-docs-muted">(blank = ∞)</td>
+                        <td>10</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </BlockStack>
+            </Box>
           </BlockStack>
 
           <Divider />
@@ -542,7 +642,7 @@ export default function BulkEditDocs({ open, onClose }) {
             </Text>
             <ul className="bulk-docs-edges">
               <li>
-                <b>Logic 2 / 3 with no Rate Bands rows</b> → upload is{" "}
+                <b>Logic 2 / 3 / 7 with no Rate Bands rows</b> → upload is{" "}
                 <b>rejected</b> with a row-level error naming the rule. Add at
                 least one row on the Rate Bands sheet with the same Name.
               </li>
@@ -567,8 +667,10 @@ export default function BulkEditDocs({ open, onClose }) {
                 case-sensitive.
               </li>
               <li>
-                <b>Rate Bands rows for a Logic 1 / 4 / 5 / 6 rule</b> → ignored.
-                Those rules read the rate from the Bulk Edit Rate column only.
+                <b>Rate Bands rows for a Logic 1 / 4 / 5 / 6 rule</b> → upload
+                is rejected. Those rules read the rate from the Bulk Edit Rate
+                column only — remove the Rate Bands rows or change Logic # to
+                2 / 3 / 7.
               </li>
               <li>
                 <b>No coverage for a rule</b> (Name appears on Rate Bands but

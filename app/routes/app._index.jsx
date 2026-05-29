@@ -930,7 +930,7 @@ export default function ShippingDashboard() {
               <a href="#docs-quickstart">Quick start</a>
               <a href="#docs-zones">What is a zone?</a>
               <a href="#docs-tour">All rates · interface tour</a>
-              <a href="#docs-models">The 6 pricing models</a>
+              <a href="#docs-models">The 7 pricing models</a>
               <a href="#docs-delete">Editing &amp; deleting rules</a>
               <a href="#docs-bulk">Bulk edit (Excel)</a>
               <a href="#docs-currency">Currency</a>
@@ -1035,7 +1035,7 @@ export default function ShippingDashboard() {
 
           {/* ── Pricing models ── */}
           <section id="docs-models" className="shipofix-docs-section">
-            <h2>The 6 pricing models</h2>
+            <h2>The 7 pricing models</h2>
             <p>
               Each rule uses one of these. Pick the one that matches how you
               normally quote shipping.
@@ -1089,6 +1089,21 @@ export default function ShippingDashboard() {
               <p>Multiply the number of items in the cart by your rate.</p>
               <p className="shipofix-docs-example">
                 Example: rate 15 · 4 items → 60.
+              </p>
+            </div>
+            <div className="shipofix-docs-model">
+              <h3>7 · Weight tiers × per-kg rate</h3>
+              <p>
+                A combination of <b>weight tiers</b> and <b>per kilogram</b>.
+                You set weight bands, but each band holds a{" "}
+                <i>per-kg rate</i> instead of a flat amount. The cart&apos;s
+                weight is multiplied by the matching band&apos;s rate. Leave
+                the top band&apos;s &ldquo;Up to&rdquo; blank so it catches
+                anything heavier.
+              </p>
+              <p className="shipofix-docs-example">
+                Example: 0–5 kg → 20/kg · 5–10 kg → 15/kg · 10 kg and up →
+                10/kg. A 7 kg cart hits the 5–10 band: 7 × 15 = 105.
               </p>
             </div>
           </section>

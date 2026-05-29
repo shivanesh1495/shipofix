@@ -168,6 +168,8 @@ export default function RulesOverview({
   onDeleteRule,
   onBulkDelete,
   onAddZone,
+  addZoneDisabled = false,
+  addZoneDisabledReason = null,
   isDeleting = false,
   isBulkDeleting = false,
 }) {
@@ -410,7 +412,13 @@ export default function RulesOverview({
                   >
                     Multiple delete
                   </Button>
-                  <Button variant="primary" icon={PlusIcon} onClick={onAddZone}>
+                  <Button
+                    variant="primary"
+                    icon={PlusIcon}
+                    onClick={onAddZone}
+                    disabled={addZoneDisabled}
+                    accessibilityLabel={addZoneDisabledReason || "Add new zone"}
+                  >
                     Add new zone
                   </Button>
                 </>
@@ -547,7 +555,13 @@ export default function RulesOverview({
               </Text>
               {rules.length === 0 ? (
                 <div className="ro-empty-actions">
-                  <Button variant="primary" icon={PlusIcon} onClick={onAddZone}>
+                  <Button
+                    variant="primary"
+                    icon={PlusIcon}
+                    onClick={onAddZone}
+                    disabled={addZoneDisabled}
+                    accessibilityLabel={addZoneDisabledReason || "Add new zone"}
+                  >
                     Add new zone
                   </Button>
                 </div>

@@ -59,6 +59,9 @@ model ZoneRule {
 
 model AppSetting {
   shop      String   @id
+  /// "free" | "advanced" | "premium". Null = user hasn't picked a plan yet,
+  /// gates the dashboard behind /app/subscription on first load.
+  plan      String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }

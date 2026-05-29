@@ -1,199 +1,221 @@
-/*
+/**
+ * /app/subscription — plan picker page.
+ *
+ * Shown automatically as the "first page" when a shop hasn't selected a
+ * plan yet (the /app loader redirects here). Once a tier is picked, the
+ * choice is written to AppSetting.plan and the user lands on /app.
+ *
+ * No real billing call — this is a pure UI gate that drives feature
+ * availability across the rest of the app.
+ */
+
+import { redirect, useFetcher, useLoaderData } from "react-router";
 import {
-  Page,
-  Text,
-  Card,
-  Button,
+  Badge,
   BlockStack,
-  InlineStack,
-  Grid,
   Box,
+  Button,
   Divider,
   Icon,
-  Badge,
+  InlineStack,
+  Page,
+  Text,
 } from "@shopify/polaris";
 import { CheckIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
-import { useLoaderData, useFetcher } from "react-router";
+import {
+  FREE_ZONE_LIMIT,
+  PLANS,
+  VALID_PLANS,
+  getShopPlan,
+  setShopPlan,
+} from "../lib/plan.server.js";
 
 export const loader = async ({ request }) => {
-  const { admin, billing } = await authenticate.admin(request);
-  
-  // Fetch current active subscriptions
-  const billingCheck = await billing.check({
-    isTest: true,
-  });
-
-  return {
-    activeSubscriptions: billingCheck.appSubscriptions,
-  };
+  const { session } = await authenticate.admin(request);
+  const currentPlan = await getShopPlan(session.shop);
+  return { currentPlan };
 };
 
 export const action = async ({ request }) => {
-  const { admin, billing } = await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
   const formData = await request.formData();
-  const plan = formData.get("plan");
+  const plan = String(formData.get("plan") || "").trim();
 
-  if (plan === "Standard") {
-    // If they select Standard, we cancel any existing subscription
-    const billingCheck = await billing.check({ isTest: true });
-    if (billingCheck.appSubscriptions.length > 0) {
-      const subscription = billingCheck.appSubscriptions[0];
-      await billing.cancel({
-        subscriptionId: subscription.id,
-        isTest: true,
-      });
-    }
-    return { success: true };
+  if (!VALID_PLANS.has(plan)) {
+    return { success: false, error: `Unknown plan "${plan}".` };
   }
 
-  // Use the built-in billing request helper
-  return await billing.request({
-    plan,
-    isTest: true,
-  });
+  await setShopPlan(session.shop, plan);
+  /* After picking, drop the user on the main dashboard. Preserve the
+     embedded ?shop=&host=&embedded= so the iframe keeps Shopify context. */
+  const search = new URL(request.url).search;
+  return redirect(`/app${search}`);
 };
 
+const PLAN_CARDS = [
+  {
+    id: PLANS.FREE,
+    name: "Free",
+    price: "$0",
+    blurb: "Try Shipofix on a small set of zones.",
+    features: [
+      `Up to ${FREE_ZONE_LIMIT} shipping zones`,
+      "All 7 pricing models",
+      "Edit each zone manually",
+      "No Excel bulk editing",
+    ],
+    cta: "Start free",
+    badge: null,
+  },
+  {
+    id: PLANS.ADVANCED,
+    name: "Advanced",
+    price: "$0",
+    blurb: "Unlimited zones — manual editing only.",
+    features: [
+      "Unlimited shipping zones",
+      "All 7 pricing models",
+      "Edit each zone manually",
+      "No Excel bulk editing",
+    ],
+    cta: "Choose Advanced",
+    badge: "Most popular",
+  },
+  {
+    id: PLANS.PREMIUM,
+    name: "Premium",
+    price: "$0",
+    blurb: "Everything — including the Excel bulk-edit workflow.",
+    features: [
+      "Unlimited shipping zones",
+      "All 7 pricing models",
+      "Edit each zone manually",
+      "Excel bulk edit (download · edit · upload)",
+    ],
+    cta: "Choose Premium",
+    badge: null,
+  },
+];
+
 export default function SubscriptionPage() {
-  const { activeSubscriptions } = useLoaderData();
+  const { currentPlan } = useLoaderData();
   const fetcher = useFetcher();
 
-  const currentPlan = activeSubscriptions.length > 0 
-    ? activeSubscriptions[0].name 
-    : "Standard";
-
-  const plans = [
-    {
-      name: "Standard",
-      price: "$0",
-      description: "Perfect for starting out small",
-      features: [
-        "1 dynamic shipping zone",
-        "Standard rate logic",
-        "Amazing feature",
-        "24/7 Customer Support",
-      ],
-      isPopular: false,
-    },
-    {
-      name: "Advanced",
-      price: "$5",
-      description: "Scale your business with ease",
-      features: [
-        "3 dynamic shipping zones",
-        "Advanced rate logic",
-        "Amazing feature",
-        "24/7 Customer Support",
-      ],
-      isPopular: true,
-    },
-    {
-      name: "Premium",
-      price: "$20",
-      description: "Full power for large operations",
-      features: [
-        "Unlimited shipping zones",
-        "Priority rate processing",
-        "Amazing feature",
-        "24/7 Customer Support",
-      ],
-      isPopular: false,
-    },
-  ];
+  const submittingPlan =
+    fetcher.state !== "idle"
+      ? String(fetcher.formData?.get("plan") || "")
+      : null;
 
   return (
-    <Page title="Shipofix Subscription" backAction={{ content: "Home", url: "/app" }}>
+    <Page>
       <Box paddingBlockEnd="800">
         <BlockStack gap="500">
-          <Box paddingBlockEnd="400" textAlign="center">
-            <Text variant="headingXl" as="h1">
-              Choose the right plan for your store
-            </Text>
-            <Box paddingBlockStart="200">
-              <Text variant="bodyLg" tone="subdued">
-                Scale your shipping logic as your business grows.
+          <Box paddingBlockEnd="200">
+            <BlockStack gap="100">
+              <Text variant="headingXl" as="h1">
+                Choose your Shipofix plan
               </Text>
-            </Box>
+              <Text tone="subdued" variant="bodyLg">
+                Pick a tier to unlock the matching set of features. You can
+                change plans at any time from this screen — no billing is
+                charged.
+              </Text>
+            </BlockStack>
           </Box>
 
-          <Grid>
-            {plans.map((plan) => (
-              <Grid.Cell key={plan.name} columnSpan={{ xs: 6, sm: 6, md: 4, lg: 4 }}>
-                <div style={{
-                  height: '100%',
-                  position: 'relative',
-                  border: plan.isPopular ? '2px solid #D5F5E3' : '1px solid #E1E3E5',
-                  borderRadius: '12px',
-                  backgroundColor: 'white',
-                  boxShadow: plan.isPopular ? '0 10px 20px rgba(0,0,0,0.05)' : 'none',
-                  transition: 'all 0.2s ease',
-                  padding: '1px'
-                }}>
-                  {plan.isPopular && (
-                    <div style={{
-                      position: 'absolute',
-                      top: '-12px',
-                      left: '50%',
-                      transform: 'translateX(-50%)',
-                    }}>
-                      <Badge tone="success">Most Popular</Badge>
+          <div className="plan-card-grid">
+            {PLAN_CARDS.map((p) => {
+              const isCurrent = currentPlan === p.id;
+              const isPopular = p.badge === "Most popular";
+              return (
+                <div
+                  key={p.id}
+                  className={
+                    "plan-card" + (isPopular ? " plan-card--popular" : "")
+                  }
+                >
+                  {p.badge && (
+                    <div className="plan-card-badge">
+                      <Badge tone="success">{p.badge}</Badge>
                     </div>
                   )}
-                  
                   <Box padding="600">
                     <BlockStack gap="400">
                       <BlockStack gap="100">
-                        <Text variant="headingLg" as="h2">{plan.name}</Text>
-                        <Text variant="bodyMd" tone="subdued">{plan.description}</Text>
+                        <InlineStack
+                          align="space-between"
+                          blockAlign="center"
+                          wrap={false}
+                        >
+                          <Text variant="headingLg" as="h2">
+                            {p.name}
+                          </Text>
+                          {isCurrent && <Badge tone="info">Current plan</Badge>}
+                        </InlineStack>
+                        <Text tone="subdued" variant="bodyMd">
+                          {p.blurb}
+                        </Text>
                       </BlockStack>
 
-                      <InlineStack align="start" blockAlign="baseline" gap="100">
-                        <Text variant="heading2xl" as="p">{plan.price}</Text>
-                        <Text variant="bodyMd" tone="subdued">/ month</Text>
+                      <InlineStack
+                        align="start"
+                        blockAlign="baseline"
+                        gap="100"
+                      >
+                        <Text variant="heading2xl" as="p">
+                          {p.price}
+                        </Text>
+                        <Text tone="subdued" variant="bodyMd">
+                          / month
+                        </Text>
                       </InlineStack>
 
                       <Divider />
 
-                      <BlockStack gap="300">
-                        {plan.features.map((feature) => (
-                          <InlineStack key={feature} gap="200" align="start">
-                            <span style={{ color: '#008060' }}>
+                      <BlockStack gap="200">
+                        {p.features.map((f) => (
+                          <InlineStack key={f} gap="200" align="start">
+                            <span style={{ color: "#008060" }}>
                               <Icon source={CheckIcon} />
                             </span>
-                            <Text variant="bodyMd">{feature}</Text>
+                            <Text variant="bodyMd">{f}</Text>
                           </InlineStack>
                         ))}
                       </BlockStack>
 
-                      <Box paddingBlockStart="400">
+                      <Box paddingBlockStart="200">
                         <fetcher.Form method="POST">
-                          <input type="hidden" name="plan" value={plan.name} />
+                          <input type="hidden" name="plan" value={p.id} />
                           <Button
+                            submit
                             fullWidth
                             size="large"
-                            variant={plan.isPopular ? "primary" : "secondary"}
-                            disabled={currentPlan === plan.name}
-                            submit
-                            loading={fetcher.state === "submitting" && fetcher.formData?.get("plan") === plan.name}
+                            variant={isPopular ? "primary" : "secondary"}
+                            disabled={isCurrent || submittingPlan !== null}
+                            loading={submittingPlan === p.id}
                           >
-                            {currentPlan === plan.name ? "Current Plan" : "Select Plan"}
+                            {isCurrent ? "You're on this plan" : p.cta}
                           </Button>
                         </fetcher.Form>
                       </Box>
                     </BlockStack>
                   </Box>
                 </div>
-              </Grid.Cell>
-            ))}
-          </Grid>
+              );
+            })}
+          </div>
+
+          <Box paddingBlockStart="400">
+            <Text tone="subdued" variant="bodySm">
+              Plans control how many shipping zones you can create and whether
+              the Excel bulk-edit workflow is available. The carrier service,
+              all 7 pricing models, and your existing zones stay available
+              regardless of tier — only new actions are gated.
+            </Text>
+          </Box>
         </BlockStack>
       </Box>
     </Page>
   );
 }
-*/
-
-export default function SubscriptionDisabled() {
-  return null;
-}
-

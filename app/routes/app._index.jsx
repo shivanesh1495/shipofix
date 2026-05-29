@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { useActionData, useFetcher, useLoaderData, useRevalidator } from "react-router";
+import { redirect, useActionData, useFetcher, useLoaderData, useLocation, useRevalidator } from "react-router";
 import {
+  Badge,
   Banner,
   BlockStack,
   Box,
@@ -13,6 +14,13 @@ import { InfoIcon } from "@shopify/polaris-icons";
 import prisma from "../db.server";
 import { authenticate } from "../shopify.server";
 import { ensureCarrierService } from "../lib/carrier.server.js";
+import {
+  FREE_ZONE_LIMIT,
+  PLANS,
+  canBulkEdit,
+  canCreateAnotherZone,
+  getShopPlan,
+} from "../lib/plan.server.js";
 import {
   QUERY_CARRIER_SERVICES,
   QUERY_DELIVERY_ZONES,
@@ -31,6 +39,17 @@ import BulkEdit from "../components/BulkEdit";
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
   const shopDomain = session.shop;
+
+  /* Gate the dashboard behind plan selection — first-time visitors land on
+     the picker, returning visitors with a saved plan skip straight here.
+     Preserve the embedded ?shop=&host=&embedded= query string on the
+     redirect; without them the iframe loses Shopify context and the
+     framework bounces to /auth/login. */
+  const plan = await getShopPlan(shopDomain);
+  if (!plan) {
+    const search = new URL(request.url).search;
+    throw redirect(`/app/subscription${search}`);
+  }
 
   const carrierStatus = await ensureCarrierService(admin);
 
@@ -211,6 +230,8 @@ export const loader = async ({ request }) => {
     profileId,
     locationGroupId,
     shippingUrl: `https://${shopDomain}/admin/settings/shipping`,
+    plan,
+    zoneCount: uniqueZones.length,
   };
 };
 
@@ -340,6 +361,21 @@ export const action = async ({ request }) => {
         success: false,
         error: "Please provide a zone name and at least one country.",
       };
+    }
+
+    /* Plan-tier gate — block Free shops who already hit FREE_ZONE_LIMIT.
+       The UI hides the button at the cap, this is the server-side guard. */
+    const plan = await getShopPlan(shopDomain);
+    if (plan === PLANS.FREE) {
+      const existingZoneCount = await prisma.zoneRule.count({
+        where: { shop: shopDomain, source: "shopify" },
+      });
+      if (!canCreateAnotherZone(plan, existingZoneCount)) {
+        return {
+          success: false,
+          error: `The Free plan is limited to ${FREE_ZONE_LIMIT} shipping zones. Upgrade to Advanced or Premium for unlimited zones.`,
+        };
+      }
     }
 
     const countriesInput = Object.entries(countryCodes).map(([code, data]) => ({
@@ -528,7 +564,15 @@ export default function ShippingDashboard() {
     shopCountry,
     profileId,
     locationGroupId,
+    plan,
+    zoneCount,
   } = useLoaderData();
+  const bulkEditEnabled = canBulkEdit(plan);
+  const atZoneCap = !canCreateAnotherZone(plan, zoneCount);
+  /* Carry the embedded ?shop=&host= query string onto in-app navigations so
+     the Shopify iframe keeps its auth context. */
+  const location = useLocation();
+  const subscriptionHref = `/app/subscription${location.search}`;
   const actionData = useActionData();
   const fetcher = useFetcher();
   const revalidator = useRevalidator();
@@ -737,23 +781,44 @@ export default function ShippingDashboard() {
     [fetcher, profileId, locationGroupId],
   );
 
-  const tabs = [
-    {
-      id: "overview",
-      content: "All rates",
-      accessibilityLabel: "See every rule and its current rate at a glance",
-    },
-    {
-      id: "bulk",
-      content: "Bulk edit (Excel)",
-      accessibilityLabel: "Download a spreadsheet, edit many rules, upload",
-    },
-  ];
+  /* Bulk Edit tab is Premium-only — hide entirely for Free/Advanced shops so
+     there's no path into the page even by URL guessing (the bulk-edit route
+     also rejects upload server-side as a defense-in-depth). */
+  const tabs = bulkEditEnabled
+    ? [
+        {
+          id: "overview",
+          content: "All rates",
+          accessibilityLabel: "See every rule and its current rate at a glance",
+        },
+        {
+          id: "bulk",
+          content: "Bulk edit (Excel)",
+          accessibilityLabel: "Download a spreadsheet, edit many rules, upload",
+        },
+      ]
+    : [
+        {
+          id: "overview",
+          content: "All rates",
+          accessibilityLabel: "See every rule and its current rate at a glance",
+        },
+      ];
 
-  const tabDescriptions = [
-    "A single table of every shipping rule, its pricing model and how much it charges. Use the Edit button on any row to change the rate, currency, or — for zone-wise rules — which countries it covers.",
-    "Edit many rules at once by downloading the template, filling it in, and uploading. Best for large catalogues.",
-  ];
+  const tabDescriptions = bulkEditEnabled
+    ? [
+        "A single table of every shipping rule, its pricing model and how much it charges. Use the Edit button on any row to change the rate, currency, or — for zone-wise rules — which countries it covers.",
+        "Edit many rules at once by downloading the template, filling it in, and uploading. Best for large catalogues.",
+      ]
+    : [
+        "A single table of every shipping rule, its pricing model and how much it charges. Use the Edit button on any row to change the rate, currency, or — for zone-wise rules — which countries it covers.",
+      ];
+
+  /* If the user downgrades while parked on the Bulk Edit tab, snap them back
+     to All rates so they're not stuck on a tab that no longer renders. */
+  useEffect(() => {
+    if (!bulkEditEnabled && selectedTab > 0) setSelectedTab(0);
+  }, [bulkEditEnabled, selectedTab]);
 
   /* ───────────────────────── Render ─────────────────────────────────── */
 
@@ -775,6 +840,40 @@ export default function ShippingDashboard() {
               </div>
             </div>
           </div>
+
+          {/* ── Plan strip ── current tier + link to picker for upgrade/downgrade. */}
+          <div className="plan-strip">
+            <div className="plan-strip-left">
+              <Text variant="bodyMd" fontWeight="semibold">Plan</Text>
+              <Badge tone={plan === PLANS.PREMIUM ? "success" : plan === PLANS.ADVANCED ? "info" : undefined}>
+                {plan === PLANS.PREMIUM ? "Premium" : plan === PLANS.ADVANCED ? "Advanced" : "Free"}
+              </Badge>
+              <Text tone="subdued" variant="bodySm">
+                {plan === PLANS.FREE
+                  ? `${zoneCount} of ${FREE_ZONE_LIMIT} zones used · bulk Excel disabled`
+                  : plan === PLANS.ADVANCED
+                    ? "Unlimited zones · bulk Excel disabled"
+                    : "Unlimited zones · bulk Excel enabled"}
+              </Text>
+            </div>
+            <Button variant="plain" url={subscriptionHref}>
+              Change plan
+            </Button>
+          </div>
+
+          {/* Zone-cap nudge for Free shops sitting at the limit. */}
+          {plan === PLANS.FREE && atZoneCap && (
+            <Banner
+              tone="warning"
+              title={`Free plan zone limit reached (${FREE_ZONE_LIMIT} zones)`}
+              action={{ content: "Upgrade plan", url: subscriptionHref }}
+            >
+              <p>
+                You're using all {FREE_ZONE_LIMIT} zones included with the Free
+                plan. Upgrade to Advanced or Premium to add more.
+              </p>
+            </Banner>
+          )}
 
           {/* ── Status banners ── */}
           {carrierStatus.message && (
@@ -854,6 +953,12 @@ export default function ShippingDashboard() {
                   onDeleteRule={handleDeleteRule}
                   onBulkDelete={handleBulkDeleteRules}
                   onAddZone={openCreateModal}
+                  addZoneDisabled={atZoneCap}
+                  addZoneDisabledReason={
+                    atZoneCap
+                      ? `Free plan limit reached (${FREE_ZONE_LIMIT} zones). Upgrade to add more.`
+                      : null
+                  }
                   isDeleting={
                     fetcher.state === "submitting" &&
                     fetcher.formData?.get("intent") === "delete_rule"

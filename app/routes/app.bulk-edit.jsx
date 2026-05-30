@@ -2004,35 +2004,42 @@ export const action = async ({ request }) => {
      Wipe the bulk-source ruleset only (zone-wise rules with
      source='shopify' are NOT touched) after we know every rule is valid,
      then write the queued rules. */
-  const wipedCount = await prisma.zoneRule.deleteMany({
-    where: { shop: shopDomain, source: "bulk" },
-  });
-  for (const r of rulesToWrite) {
-    await prisma.zoneRule.upsert({
-      where: {
-        shop_deliveryZoneGid: { shop: shopDomain, deliveryZoneGid: r.gid },
-      },
-      update: {
-        name: r.name,
-        countries: r.countries,
-        logicType: r.logicType,
-        rulesJson: r.rulesJson,
-        currency: r.currency,
-        source: "bulk",
-      },
-      create: {
-        shop: shopDomain,
-        deliveryZoneGid: r.gid,
-        name: r.name,
-        countries: r.countries,
-        logicType: r.logicType,
-        rulesJson: r.rulesJson,
-        currency: r.currency,
-        source: "bulk",
-      },
-    });
-    summary.updated += 1;
-  }
+  /* Wipe + rewrite must be atomic: if it ran as a bare deleteMany followed by
+     a loop of upserts, a crash partway through would leave the shop with its
+     old bulk rules gone and only some of the new ones written. Bundle every
+     operation into one transaction so the ruleset either flips fully to the
+     new upload or stays exactly as it was. */
+  const [wipedCount] = await prisma.$transaction([
+    prisma.zoneRule.deleteMany({
+      where: { shop: shopDomain, source: "bulk" },
+    }),
+    ...rulesToWrite.map((r) =>
+      prisma.zoneRule.upsert({
+        where: {
+          shop_deliveryZoneGid: { shop: shopDomain, deliveryZoneGid: r.gid },
+        },
+        update: {
+          name: r.name,
+          countries: r.countries,
+          logicType: r.logicType,
+          rulesJson: r.rulesJson,
+          currency: r.currency,
+          source: "bulk",
+        },
+        create: {
+          shop: shopDomain,
+          deliveryZoneGid: r.gid,
+          name: r.name,
+          countries: r.countries,
+          logicType: r.logicType,
+          rulesJson: r.rulesJson,
+          currency: r.currency,
+          source: "bulk",
+        },
+      }),
+    ),
+  ]);
+  summary.updated = rulesToWrite.length;
 
   /* Cache the file so vendors can re-download exactly what they uploaded.
      Re-uploading replaces the cached copy. */

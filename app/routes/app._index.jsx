@@ -13,7 +13,11 @@ import {
 import { InfoIcon } from "@shopify/polaris-icons";
 import prisma from "../db.server";
 import { authenticate } from "../shopify.server";
-import { ensureCarrierService } from "../lib/carrier.server.js";
+import {
+  ensureCarrierService,
+  getCallbackUrl,
+  CARRIER_SERVICE_NAME,
+} from "../lib/carrier.server.js";
 import { getShopPlan } from "../lib/plan.server.js";
 import {
   FREE_ZONE_LIMIT,
@@ -26,6 +30,7 @@ import {
   QUERY_DELIVERY_ZONES,
   MUTATION_DELIVERY_PROFILE_UPDATE,
   MUTATION_DELETE_CARRIER,
+  MUTATION_UPDATE_CARRIER,
 } from "../lib/graphql.js";
 
 /* ── Components ── */
@@ -279,6 +284,20 @@ export const action = async ({ request }) => {
     });
     if (!rule) return { success: false, error: "Rule not found." };
 
+    /* Guard: never let the shop drop to zero rules. With no rules the carrier
+       service still answers checkout requests but matches nothing, so Shopify
+       gets empty rates and customers can't pick a shipping option. Point the
+       merchant at Disconnect, which deactivates the carrier service so the
+       store falls back to Shopify's native rates instead. */
+    const totalRules = await prisma.zoneRule.count({ where: { shop: shopDomain } });
+    if (totalRules <= 1) {
+      return {
+        success: false,
+        error:
+          "You can't delete the last rule — checkout would have no rates to return. Use \"Disconnect Shipofix\" to hand shipping back to Shopify's native rates.",
+      };
+    }
+
     if (rule.source === "shopify") {
       const profileId = formData.get("profileId");
       const locationGroupId = formData.get("locationGroupId");
@@ -310,6 +329,20 @@ export const action = async ({ request }) => {
       where: { id: { in: ids }, shop: shopDomain },
     });
 
+    /* Guard BEFORE any Shopify mutation: a selection that covers every
+       remaining rule would empty the ruleset, leaving checkout with no rates
+       to return (and, for zone-wise rules, irreversibly deleting the store's
+       Shopify delivery zones). Block it and point at Disconnect, which cleanly
+       hands shipping back to Shopify's native rates. */
+    const totalRules = await prisma.zoneRule.count({ where: { shop: shopDomain } });
+    if (dbRules.length >= totalRules) {
+      return {
+        success: false,
+        error:
+          "You can't delete every rule at once — checkout would have no rates to return. Keep at least one rule, or use \"Disconnect Shipofix\" to hand shipping back to Shopify's native rates.",
+      };
+    }
+
     const shopifyGids = dbRules
       .filter((r) => r.source === "shopify" && r.deliveryZoneGid)
       .map((r) => r.deliveryZoneGid);
@@ -332,6 +365,74 @@ export const action = async ({ request }) => {
     return {
       success: true,
       message: `${dbRules.length} rule${dbRules.length === 1 ? "" : "s"} deleted.`,
+    };
+  }
+
+  /* ── Disconnect Shipofix ──
+     Deliberate teardown / escape hatch from the delete guards. Rather than
+     deleting rules (destructive, and zone-wise rules own real Shopify zones),
+     we deactivate the carrier service. Shopify then stops calling our endpoint
+     and falls back to the store's native shipping rates — the consistent
+     "Shipofix is off" state. Rules stay in the DB so reconnecting restores
+     everything. */
+  if (intent === "disconnect") {
+    const callbackUrl = getCallbackUrl();
+    const queryResponse = await admin.graphql(QUERY_CARRIER_SERVICES);
+    const queryJson = await queryResponse.json();
+    const services =
+      queryJson?.data?.carrierServices?.edges?.map((e) => e.node) || [];
+    const ours =
+      services.find((s) => callbackUrl && s.callbackUrl === callbackUrl) ||
+      services.find((s) => s.name === CARRIER_SERVICE_NAME);
+
+    if (!ours) {
+      return { success: false, error: "No active Shipofix carrier service to disconnect." };
+    }
+
+    const res = await admin.graphql(MUTATION_UPDATE_CARRIER, {
+      variables: { input: { id: ours.id, active: false } },
+    });
+    const resJson = await res.json();
+    const errors = resJson?.data?.carrierServiceUpdate?.userErrors || [];
+    if (errors.length > 0) {
+      return { success: false, error: errors.map((e) => e.message).join(", ") };
+    }
+
+    return {
+      success: true,
+      message:
+        "Shipofix disconnected — your store now uses Shopify's native shipping rates. Reconnect any time from this page.",
+    };
+  }
+
+  /* ── Reconnect Shipofix ── reverse of disconnect: reactivate the carrier
+     service so Shopify resumes calling our endpoint for live rates. */
+  if (intent === "reconnect") {
+    const callbackUrl = getCallbackUrl();
+    const queryResponse = await admin.graphql(QUERY_CARRIER_SERVICES);
+    const queryJson = await queryResponse.json();
+    const services =
+      queryJson?.data?.carrierServices?.edges?.map((e) => e.node) || [];
+    const ours =
+      services.find((s) => callbackUrl && s.callbackUrl === callbackUrl) ||
+      services.find((s) => s.name === CARRIER_SERVICE_NAME);
+
+    if (!ours) {
+      return { success: false, error: "No Shipofix carrier service found to reconnect." };
+    }
+
+    const res = await admin.graphql(MUTATION_UPDATE_CARRIER, {
+      variables: { input: { id: ours.id, active: true } },
+    });
+    const resJson = await res.json();
+    const errors = resJson?.data?.carrierServiceUpdate?.userErrors || [];
+    if (errors.length > 0) {
+      return { success: false, error: errors.map((e) => e.message).join(", ") };
+    }
+
+    return {
+      success: true,
+      message: "Shipofix reconnected — your configured rates are live at checkout again.",
     };
   }
 
@@ -781,6 +882,18 @@ export default function ShippingDashboard() {
     [fetcher, profileId, locationGroupId],
   );
 
+  const handleDisconnect = useCallback(() => {
+    const body = new FormData();
+    body.set("intent", "disconnect");
+    fetcher.submit(body, { method: "POST" });
+  }, [fetcher]);
+
+  const handleReconnect = useCallback(() => {
+    const body = new FormData();
+    body.set("intent", "reconnect");
+    fetcher.submit(body, { method: "POST" });
+  }, [fetcher]);
+
   /* Bulk Edit tab is Premium-only — hide entirely for Free/Advanced shops so
      there's no path into the page even by URL guessing (the bulk-edit route
      also rejects upload server-side as a defense-in-depth). */
@@ -875,10 +988,39 @@ export default function ShippingDashboard() {
             </Banner>
           )}
 
-          {/* ── Status banners ── */}
+          {/* ── Status banners ──
+             Connected shops get a "Disconnect" action (hands shipping back to
+             Shopify's native rates); disconnected shops get "Reconnect". The
+             button doubles as the safe escape hatch the delete guards point to
+             when a merchant really does want zero Shipofix rates. */}
           {carrierStatus.message && (
             <Banner
-              tone={carrierStatus.state === "success" ? "success" : "info"}
+              tone={
+                carrierStatus.state === "success"
+                  ? "success"
+                  : carrierStatus.state === "disconnected"
+                    ? "warning"
+                    : "info"
+              }
+              action={
+                carrierStatus.state === "success"
+                  ? {
+                      content: "Disconnect",
+                      onAction: handleDisconnect,
+                      loading:
+                        fetcher.state !== "idle" &&
+                        fetcher.formData?.get("intent") === "disconnect",
+                    }
+                  : carrierStatus.state === "disconnected"
+                    ? {
+                        content: "Reconnect",
+                        onAction: handleReconnect,
+                        loading:
+                          fetcher.state !== "idle" &&
+                          fetcher.formData?.get("intent") === "reconnect",
+                      }
+                    : undefined
+              }
             >
               {carrierStatus.message}
             </Banner>

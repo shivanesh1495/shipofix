@@ -68,6 +68,18 @@ export async function ensureCarrierService(admin) {
     );
 
     if (exactMatch) {
+      /* Found our service at the right URL. If it's been deliberately
+         deactivated (Disconnect), report that distinctly instead of claiming
+         it's connected — and DON'T auto-reactivate, or Disconnect would be
+         undone on the next page load. The merchant reconnects explicitly. */
+      if (exactMatch.active === false) {
+        return {
+          state: "disconnected",
+          message:
+            "Shipofix is disconnected — your store is using Shopify's native shipping rates. Reconnect to use the rates you configure here.",
+          staleServices: otherStale,
+        };
+      }
       return {
         state: "success",
         message:

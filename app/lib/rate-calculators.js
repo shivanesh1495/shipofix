@@ -145,6 +145,20 @@ const calculators = {
 /* ── Public API ───────────────────────────────────────────────────────── */
 
 /**
+ * The set of logicType values that have a real calculator behind them.
+ * Anything else (e.g. the "DEFAULT" placeholder auto-created for un-priced
+ * Shopify zones, or a stale/unknown type) can only ever return a null rate,
+ * so it must NOT participate in checkout matching — otherwise it can shadow a
+ * properly-configured rule and leave the customer with no shipping option.
+ */
+export const PRICEABLE_LOGIC_TYPES = new Set(Object.keys(calculators));
+
+/** @returns {boolean} true if `logicType` maps to a real rate calculator. */
+export function isPriceableLogicType(logicType) {
+  return PRICEABLE_LOGIC_TYPES.has(logicType);
+}
+
+/**
  * Calculate a shipping rate for the given logic type.
  *
  * @param {string} logicType  - One of the keys in `calculators`

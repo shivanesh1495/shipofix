@@ -15,6 +15,7 @@
 
 import {
   Badge,
+  Banner,
   BlockStack,
   Box,
   Button,
@@ -257,6 +258,12 @@ export default function RulesOverview({
   const isAllSelected =
     visibleRules.length > 0 && visibleRules.every((r) => selectedIds.has(r.id));
   const isIndeterminate = selectedIds.size > 0 && !isAllSelected;
+
+  /* Mirror the server-side guard: the shop must always keep at least one rule
+     so checkout has a rate to return. If the current selection covers every
+     rule, we block the delete here too and point at Disconnect — otherwise the
+     server rejects it and the user only finds out via an error toast. */
+  const wouldDeleteAll = selectedIds.size > 0 && selectedIds.size >= rules.length;
 
   function toggleSelect(id) {
     setSelectedIds((prev) => {
@@ -813,7 +820,7 @@ export default function RulesOverview({
           content: `Delete ${selectedIds.size} rule${selectedIds.size === 1 ? "" : "s"}`,
           destructive: true,
           loading: isBulkDeleting,
-          disabled: isBulkDeleting,
+          disabled: isBulkDeleting || wouldDeleteAll,
           onAction: () => {
             const ids = [...selectedIds];
             setConfirmBulkDelete(false);
@@ -830,12 +837,23 @@ export default function RulesOverview({
         ]}
       >
         <Modal.Section>
-          <Text>
-            This permanently removes {selectedIds.size} rule
-            {selectedIds.size === 1 ? "" : "s"}. Customers shipping to the
-            affected countries will fall back to other matching rules or
-            Shopify&apos;s default rates.
-          </Text>
+          {wouldDeleteAll ? (
+            <Banner tone="warning" title="You can't delete every rule">
+              <p>
+                At least one rule must remain so checkout always has a rate to
+                return. Deselect a rule to continue, or use{" "}
+                <strong>Disconnect Shipofix</strong> on the dashboard to hand
+                shipping back to Shopify&apos;s native rates.
+              </p>
+            </Banner>
+          ) : (
+            <Text>
+              This permanently removes {selectedIds.size} rule
+              {selectedIds.size === 1 ? "" : "s"}. Customers shipping to the
+              affected countries will fall back to other matching rules or
+              Shopify&apos;s default rates.
+            </Text>
+          )}
         </Modal.Section>
       </Modal>
     </Box>

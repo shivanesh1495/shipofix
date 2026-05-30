@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { Buffer } from "node:buffer";
 import process from "node:process";
 import prisma from "../db.server";
 import {
@@ -8,7 +9,7 @@ import {
   getZoneMatchScore,
   createLogger,
 } from "../lib/shipping.utils.js";
-import { calculateRate } from "../lib/rate-calculators.js";
+import { calculateRate, isPriceableLogicType } from "../lib/rate-calculators.js";
 
 /**
  * Carrier Service callback endpoint.
@@ -51,13 +52,22 @@ export const action = async ({ request }) => {
       .update(rawBody, "utf8")
       .digest("base64");
 
+    /* Constant-time compare to avoid leaking the signature via timing.
+       timingSafeEqual throws on length mismatch, so guard that first. */
+    const hmacMatch = (() => {
+      if (!hmacHeader) return false;
+      const a = Buffer.from(hmacHeader);
+      const b = Buffer.from(generatedHmac);
+      return a.length === b.length && crypto.timingSafeEqual(a, b);
+    })();
+
     await log({
       event: "HMAC_DEBUG",
-      hmacMatch: hmacHeader === generatedHmac,
+      hmacMatch,
       secretLoaded: !!secret,
     });
 
-    if (hmacHeader !== generatedHmac) {
+    if (!hmacMatch) {
       await log("HMAC verification FAILED — returning 401 Unauthorized");
       return new Response("Unauthorized", { status: 401 });
     }
@@ -135,7 +145,17 @@ export const action = async ({ request }) => {
     let matchedRule = null;
     let matchedScore = -1;
 
-    for (const rule of candidates) {
+    /* Only rules with a real calculator can win. Placeholder "DEFAULT" rules
+       (auto-created for un-priced Shopify zones) and any unknown/stale type
+       can only return null, so excluding them here stops them shadowing a
+       properly-configured rule that also covers this destination. */
+    const priceableCandidates = candidates.filter((r) =>
+      isPriceableLogicType(r.logicType),
+    );
+
+    await log({ event: "PRICEABLE_CANDIDATES", count: priceableCandidates.length, skipped: candidates.length - priceableCandidates.length });
+
+    for (const rule of priceableCandidates) {
       const coverageRules = parseZoneCoverage(rule.countries);
       const score = getZoneMatchScore(coverageRules, destinationCountry, destinationProvince);
       await log({ event: "SCORE_CHECK", ruleName: rule.name, gid: rule.deliveryZoneGid, score, destinationCountry, destinationProvince });

@@ -20,6 +20,10 @@ import {
 } from "../lib/carrier.server.js";
 import { getEntitledPlan } from "../lib/billing.server.js";
 import {
+  reconcileBulkCoverageZone,
+  isManagedZoneName,
+} from "../lib/coverage.server.js";
+import {
   FREE_ZONE_LIMIT,
   PLANS,
   canBulkEdit,
@@ -98,7 +102,10 @@ export const loader = async ({ request }) => {
             isDomestic: countries.some((c) => c.countryCode === shopCountry),
             hasMethodDefinition: methodCount > 0,
           });
-          if (methodCount === 0) zonesWithoutMethods.push(z.id);
+          /* The auto-managed bulk-coverage zone owns its own method and is
+             reconciled separately — never treat it as a stray zone to patch. */
+          if (methodCount === 0 && !isManagedZoneName(z.name))
+            zonesWithoutMethods.push(z.id);
         }
       });
     });
@@ -162,6 +169,11 @@ export const loader = async ({ request }) => {
 
   const uniqueZones = Array.from(zoneMap.values());
 
+  /* The auto-managed bulk-coverage zone exists only to make Shopify call our
+     carrier for Excel rules — it's never a merchant-editable rule, so keep it
+     out of the rules table, placeholder creation, and the UI zone list. */
+  const realZones = uniqueZones.filter((z) => !isManagedZoneName(z.name));
+
   /* ── Sync zone-wise rules (source='shopify') with the live Shopify zone
      list. We update the rule's name/countries when the underlying Shopify
      zone changes, and clean up orphaned rules whose zone was deleted. ── */
@@ -202,7 +214,7 @@ export const loader = async ({ request }) => {
   /* Auto-create placeholder rules for any Shopify zone that doesn't have a
      ZoneRule yet — so a zone the vendor created via "Add new zone" shows up
      in the All rates table even before they've picked a pricing model. */
-  const missingZones = uniqueZones.filter((z) => !rulesByGid.has(z.id));
+  const missingZones = realZones.filter((z) => !rulesByGid.has(z.id));
   if (missingZones.length > 0) {
     for (const z of missingZones) {
       try {
@@ -224,6 +236,26 @@ export const loader = async ({ request }) => {
     }
   }
 
+  /* ── Auto-managed coverage for bulk (Excel) rules ──
+     Bulk rules carry a synthetic GID and own no Shopify zone, so Shopify never
+     calls our carrier for them unless some zone covers their countries. Keep a
+     single managed zone in sync with the bulk rules' coverage so Excel-only
+     setups actually quote at checkout. Only while connected — a disconnected
+     shop deliberately hands shipping back to Shopify, so we touch nothing. */
+  if (carrierStatus.state === "success" && profileId && locationGroupId) {
+    try {
+      await reconcileBulkCoverageZone({
+        admin,
+        shopDomain,
+        profileId,
+        locationGroupId,
+        zones: uniqueZones,
+      });
+    } catch (e) {
+      console.error("[COVERAGE] reconcile failed:", e?.message);
+    }
+  }
+
   /* Fresh read after sync — single source of truth for the UI. */
   const allRules = await prisma.zoneRule.findMany({
     where: { shop: shopDomain },
@@ -232,14 +264,14 @@ export const loader = async ({ request }) => {
 
   return {
     rules: allRules,
-    zones: uniqueZones,
+    zones: realZones,
     carrierStatus,
     shopCountry,
     profileId,
     locationGroupId,
     shippingUrl: `https://${shopDomain}/admin/settings/shipping`,
     plan,
-    zoneCount: uniqueZones.length,
+    zoneCount: realZones.length,
   };
 };
 

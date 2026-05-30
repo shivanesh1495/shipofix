@@ -61,9 +61,36 @@ model AppSetting {
   shop      String   @id
   /// "free" | "advanced" | "premium". Null = user hasn't picked a plan yet,
   /// gates the dashboard behind /app/subscription on first load.
+  ///
+  /// IMPORTANT (billing): when BILLING_ENABLED=true this column is the paid
+  /// ENTITLEMENT, not just a UI choice. A paid tier (advanced/premium) is
+  /// written here ONLY after Razorpay confirms payment via webhook, so every
+  /// existing `getShopPlan`-based gate across the app enforces payment with no
+  /// extra checks. When billing is disabled the picker writes it directly
+  /// (current behaviour). See app/lib/billing.server.js.
   plan      String?
+
+  /* ── Razorpay billing columns (dormant until BILLING_ENABLED=true) ──
+     All nullable so they're a no-op for the current free-for-all mode; the
+     billing code in app/lib/billing.server.js is the only reader/writer. */
+  /// "active" | "pending" | "cancelled" | null. Source of truth for whether a
+  /// paid subscription is currently entitling this shop.
+  billingStatus           String?
+  /// The paid tier the Razorpay subscription is for ("advanced"|"premium").
+  billingPlan             String?
+  /// Razorpay subscription id (sub_xxx) — used to reconcile webhook events.
+  razorpaySubscriptionId  String?
+  /// Razorpay customer id (cust_xxx), if a customer was created.
+  razorpayCustomerId      String?
+  /// End of the currently-paid billing period (from subscription.charged).
+  billingCurrentPeriodEnd DateTime?
+  /// Last time any billing column changed — for support/debugging.
+  billingUpdatedAt        DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([razorpaySubscriptionId])
 }
 
 model BulkEditUpload {

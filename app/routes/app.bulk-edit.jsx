@@ -24,7 +24,8 @@ import * as XLSX from "xlsx";
 import ExcelJS from "exceljs";
 import prisma from "../db.server";
 import { authenticate } from "../shopify.server";
-import { canBulkEdit, getShopPlan } from "../lib/plan.server.js";
+import { canBulkEdit } from "../lib/plan.server.js";
+import { getEntitledPlan } from "../lib/billing.server.js";
 import { QUERY_DELIVERY_ZONES } from "../lib/graphql.js";
 import ALL_COUNTRIES from "../lib/locations.json";
 
@@ -1342,7 +1343,7 @@ export const action = async ({ request }) => {
   /* Premium-only beyond this point — Bulk Edit upload is the gated feature.
      Inline edits / deletes / "delete_last" above are deliberately allowed on
      all plans so a downgraded user can still manage existing bulk rules. */
-  const plan = await getShopPlan(shopDomain);
+  const plan = await getEntitledPlan(shopDomain);
   if (!canBulkEdit(plan)) {
     return {
       success: false,

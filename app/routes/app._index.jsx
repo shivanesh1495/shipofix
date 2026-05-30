@@ -18,7 +18,7 @@ import {
   getCallbackUrl,
   CARRIER_SERVICE_NAME,
 } from "../lib/carrier.server.js";
-import { getShopPlan } from "../lib/plan.server.js";
+import { getEntitledPlan } from "../lib/billing.server.js";
 import {
   FREE_ZONE_LIMIT,
   PLANS,
@@ -50,7 +50,10 @@ export const loader = async ({ request }) => {
      Preserve the embedded ?shop=&host=&embedded= query string on the
      redirect; without them the iframe loses Shopify context and the
      framework bounces to /auth/login. */
-  const plan = await getShopPlan(shopDomain);
+  /* getEntitledPlan == getShopPlan when billing is off. When billing is on it
+     downgrades a paid tier to Free unless a Razorpay subscription is active,
+     so an unpaid shop can never reach the paid dashboard features. */
+  const plan = await getEntitledPlan(shopDomain);
   if (!plan) {
     const search = new URL(request.url).search;
     throw redirect(`/app/subscription${search}`);
@@ -465,8 +468,10 @@ export const action = async ({ request }) => {
     }
 
     /* Plan-tier gate — block Free shops who already hit FREE_ZONE_LIMIT.
-       The UI hides the button at the cap, this is the server-side guard. */
-    const plan = await getShopPlan(shopDomain);
+       The UI hides the button at the cap, this is the server-side guard.
+       getEntitledPlan ensures a lapsed/unpaid "advanced" shop is treated as
+       Free here when billing is on. */
+    const plan = await getEntitledPlan(shopDomain);
     if (plan === PLANS.FREE) {
       const existingZoneCount = await prisma.zoneRule.count({
         where: { shop: shopDomain, source: "shopify" },

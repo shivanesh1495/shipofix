@@ -23,13 +23,8 @@ import {
 } from "@shopify/polaris";
 import { CheckIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
-import {
-  FREE_ZONE_LIMIT,
-  PLANS,
-  VALID_PLANS,
-  getShopPlan,
-  setShopPlan,
-} from "../lib/plan.server.js";
+import { getShopPlan, setShopPlan } from "../lib/plan.server.js";
+import { FREE_ZONE_LIMIT, PLANS, VALID_PLANS } from "../lib/plan.js";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);

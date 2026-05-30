@@ -14,13 +14,13 @@ import { InfoIcon } from "@shopify/polaris-icons";
 import prisma from "../db.server";
 import { authenticate } from "../shopify.server";
 import { ensureCarrierService } from "../lib/carrier.server.js";
+import { getShopPlan } from "../lib/plan.server.js";
 import {
   FREE_ZONE_LIMIT,
   PLANS,
   canBulkEdit,
   canCreateAnotherZone,
-  getShopPlan,
-} from "../lib/plan.server.js";
+} from "../lib/plan.js";
 import {
   QUERY_CARRIER_SERVICES,
   QUERY_DELIVERY_ZONES,
@@ -869,7 +869,7 @@ export default function ShippingDashboard() {
               action={{ content: "Upgrade plan", url: subscriptionHref }}
             >
               <p>
-                You're using all {FREE_ZONE_LIMIT} zones included with the Free
+                You&apos;re using all {FREE_ZONE_LIMIT} zones included with the Free
                 plan. Upgrade to Advanced or Premium to add more.
               </p>
             </Banner>

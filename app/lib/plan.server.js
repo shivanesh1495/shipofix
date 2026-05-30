@@ -1,10 +1,11 @@
 /**
- * Plan / tier helpers — server-only.
+ * Plan / tier helpers — SERVER-ONLY (imports prisma).
  *
- * Three tiers, persisted on AppSetting.plan:
- *   - free      → up to FREE_ZONE_LIMIT zones, no bulk-edit Excel
- *   - advanced  → unlimited zones (manual one-by-one only), no bulk-edit Excel
- *   - premium   → everything, including bulk-edit Excel
+ * The pure constants and capability checks live in `./plan.js` so the client
+ * bundle can use them without dragging prisma in. This module adds the two
+ * helpers that actually touch the database — read and write the chosen tier —
+ * and re-exports the shared pieces so server code can import everything from
+ * one place if it prefers.
  *
  * Plan choice is UI-only for now — no Shopify Billing API call. The picker
  * page (/app/subscription) writes the chosen tier to AppSetting and the rest
@@ -12,17 +13,16 @@
  */
 
 import prisma from "../db.server";
+import { VALID_PLANS } from "./plan.js";
 
-export const PLANS = {
-  FREE: "free",
-  ADVANCED: "advanced",
-  PREMIUM: "premium",
-};
-
-export const VALID_PLANS = new Set(Object.values(PLANS));
-
-/** Max number of zones a Free-plan shop may own. */
-export const FREE_ZONE_LIMIT = 2;
+export {
+  PLANS,
+  VALID_PLANS,
+  FREE_ZONE_LIMIT,
+  canBulkEdit,
+  canCreateAnotherZone,
+  zoneLimitFor,
+} from "./plan.js";
 
 /**
  * Read the current plan for a shop. Returns null if the shop hasn't picked
@@ -44,19 +44,4 @@ export async function setShopPlan(shop, plan) {
     update: { plan },
     create: { shop, plan },
   });
-}
-
-/* ── Capability checks — single source of truth for tier gating ────────── */
-
-export function canBulkEdit(plan) {
-  return plan === PLANS.PREMIUM;
-}
-
-export function canCreateAnotherZone(plan, currentZoneCount) {
-  if (plan === PLANS.FREE) return currentZoneCount < FREE_ZONE_LIMIT;
-  return plan === PLANS.ADVANCED || plan === PLANS.PREMIUM;
-}
-
-export function zoneLimitFor(plan) {
-  return plan === PLANS.FREE ? FREE_ZONE_LIMIT : null; // null = unlimited
 }

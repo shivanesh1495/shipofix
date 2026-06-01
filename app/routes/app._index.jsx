@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
-import { redirect, useActionData, useFetcher, useLoaderData, useLocation, useRevalidator } from "react-router";
+import { redirect, useActionData, useFetcher, useLoaderData, useLocation, useNavigate, useRevalidator } from "react-router";
 import {
   Badge,
   Banner,
   BlockStack,
   Box,
   Button,
+  Checkbox,
+  InlineStack,
+  Modal,
   Page,
   Tabs,
   Text,
@@ -345,6 +348,17 @@ export const loader = async ({ request }) => {
     orderBy: { updatedAt: "desc" },
   });
 
+  /* Free-plan enforcement: a shop that was on Advanced/Premium and let its
+     subscription lapse (or manually downgraded) keeps all its rules in the DB,
+     but the Free plan only entitles them to FREE_ZONE_LIMIT rules. When that's
+     the case we surface a blocking gate on the client that forces the merchant
+     to either (a) pick which rules to keep and delete the rest, or (b) upgrade.
+     We never auto-delete here — the merchant chooses. A legitimately-free shop
+     can never exceed the limit (the create gate + bulk-edit gate prevent it),
+     so this only ever triggers after a downgrade. */
+  const overFreeLimit =
+    plan === PLANS.FREE && allRules.length > FREE_ZONE_LIMIT;
+
   return {
     rules: allRules,
     zones: realZones,
@@ -355,6 +369,8 @@ export const loader = async ({ request }) => {
     shippingUrl: `https://${shopDomain}/admin/settings/shipping`,
     plan,
     zoneCount: realZones.length,
+    overFreeLimit,
+    freeRuleLimit: FREE_ZONE_LIMIT,
   };
 };
 
@@ -365,6 +381,115 @@ export const action = async ({ request }) => {
   const shopDomain = session.shop;
   const formData = await request.formData();
   const intent = formData.get("intent");
+
+  /* ── Prune the ruleset down to the Free-plan limit ──
+     Called from the blocking gate shown when a downgraded shop has more rules
+     than the Free plan entitles. The merchant picks the rules to KEEP; every
+     other rule (and, for zone-wise rules, its underlying Shopify delivery
+     zone) is permanently deleted. Guarded so it can only ever run while the
+     shop is actually on Free and only delete down to — never below — what the
+     merchant chose to keep. */
+  if (intent === "prune_to_free") {
+    let keepIds;
+    try {
+      keepIds = JSON.parse(formData.get("keepIds") || "[]");
+    } catch {
+      return { success: false, error: "Couldn't read your selection. Please try again." };
+    }
+    if (!Array.isArray(keepIds)) keepIds = [];
+
+    /* Re-check entitlement server-side — never trust the client. If billing
+       says the shop is actually on a paid tier, there's nothing to prune. */
+    const currentPlan = await getEntitledPlan(shopDomain);
+    if (currentPlan !== PLANS.FREE) {
+      return {
+        success: false,
+        error: "Your plan allows unlimited rules — nothing needs to be removed.",
+      };
+    }
+
+    if (keepIds.length === 0) {
+      return { success: false, error: `Select at least one rule to keep (up to ${FREE_ZONE_LIMIT}).` };
+    }
+    if (keepIds.length > FREE_ZONE_LIMIT) {
+      return {
+        success: false,
+        error: `The Free plan allows at most ${FREE_ZONE_LIMIT} rules. Select no more than ${FREE_ZONE_LIMIT}.`,
+      };
+    }
+
+    const allShopRules = await prisma.zoneRule.findMany({ where: { shop: shopDomain } });
+    const keepSet = new Set(keepIds);
+
+    /* Every id the client sent must really belong to this shop — otherwise the
+       selection is stale (rules changed underneath them). */
+    const keptRules = allShopRules.filter((r) => keepSet.has(r.id));
+    if (keptRules.length !== keepIds.length) {
+      return {
+        success: false,
+        error: "Some selected rules no longer exist — refresh the page and choose again.",
+      };
+    }
+
+    const toDelete = allShopRules.filter((r) => !keepSet.has(r.id));
+    if (toDelete.length === 0) {
+      return { success: true, message: "You're already within the Free plan limit." };
+    }
+
+    /* Delete the underlying Shopify delivery zones for zone-wise rules first —
+       if we deleted only the ZoneRule rows, the loader would recreate
+       placeholder rules from the still-living Shopify zones and the shop would
+       be over the limit again on the very next page load. */
+    const shopifyGids = toDelete
+      .filter((r) => r.source === "shopify" && r.deliveryZoneGid)
+      .map((r) => r.deliveryZoneGid);
+
+    if (shopifyGids.length > 0) {
+      const profileId = formData.get("profileId");
+      const locationGroupId = formData.get("locationGroupId");
+      if (!profileId || !locationGroupId) {
+        return {
+          success: false,
+          error: "Couldn't reach Shopify to remove the zones. Refresh the page and try again.",
+        };
+      }
+      const res = await admin.graphql(MUTATION_DELIVERY_PROFILE_UPDATE, {
+        variables: {
+          profileId,
+          profile: {
+            locationGroupsToUpdate: [
+              { id: locationGroupId, zonesToDelete: shopifyGids },
+            ],
+          },
+        },
+      });
+      const resJson = await res.json();
+      const errors = resJson?.data?.deliveryProfileUpdate?.userErrors || [];
+      if (errors.length > 0) {
+        return { success: false, error: errors.map((e) => e.message).join(", ") };
+      }
+    }
+
+    await prisma.zoneRule.deleteMany({
+      where: { shop: shopDomain, id: { in: toDelete.map((r) => r.id) } },
+    });
+
+    /* If we removed every bulk rule, drop the cached upload so a later upgrade
+       back to Premium doesn't resurface a stale "last uploaded file". */
+    if (prisma.bulkEditUpload) {
+      const bulkLeft = await prisma.zoneRule.count({
+        where: { shop: shopDomain, source: "bulk" },
+      });
+      if (bulkLeft === 0) {
+        await prisma.bulkEditUpload.deleteMany({ where: { shop: shopDomain } });
+      }
+    }
+
+    return {
+      success: true,
+      message: `Kept ${keptRules.length} rule${keptRules.length === 1 ? "" : "s"} · deleted ${toDelete.length}. You're now within the Free plan.`,
+    };
+  }
 
   /* ── Save / update a rule (zone-wise OR bulk-source) ── */
   if (intent === "save_rule") {
@@ -867,16 +992,25 @@ export default function ShippingDashboard() {
     locationGroupId,
     plan,
     zoneCount,
+    overFreeLimit,
+    freeRuleLimit,
   } = useLoaderData();
   const bulkEditEnabled = canBulkEdit(plan);
   const atZoneCap = !canCreateAnotherZone(plan, zoneCount);
   /* Carry the embedded ?shop=&host= query string onto in-app navigations so
      the Shopify iframe keeps its auth context. */
   const location = useLocation();
+  const navigate = useNavigate();
   const subscriptionHref = `/app/subscription${location.search}`;
   const actionData = useActionData();
   const fetcher = useFetcher();
   const revalidator = useRevalidator();
+
+  /* Free-plan over-limit enforcement gate state. `keepIds` is the set of rules
+     the merchant chose to keep (max = freeRuleLimit); `ackPrune` is the
+     "I understand this deletes the rest" confirmation. */
+  const [keepIds, setKeepIds] = useState(new Set());
+  const [ackPrune, setAckPrune] = useState(false);
 
   const [selectedTab, setSelectedTab] = useState(0);
 
@@ -1087,6 +1221,50 @@ export default function ShippingDashboard() {
     body.set("intent", "disconnect");
     fetcher.submit(body, { method: "POST" });
   }, [fetcher]);
+
+  /* Toggle a rule in/out of the "keep" set for the Free-plan prune gate.
+     Caps the set at freeRuleLimit — picking a (limit+1)th is a no-op. */
+  const toggleKeep = useCallback(
+    (id) => {
+      setKeepIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) {
+          next.delete(id);
+        } else if (next.size < freeRuleLimit) {
+          next.add(id);
+        }
+        return next;
+      });
+    },
+    [freeRuleLimit],
+  );
+
+  const handlePruneToFree = useCallback(() => {
+    const body = new FormData();
+    body.set("intent", "prune_to_free");
+    body.set("keepIds", JSON.stringify([...keepIds]));
+    body.set("profileId", profileId || "");
+    body.set("locationGroupId", locationGroupId || "");
+    fetcher.submit(body, { method: "POST" });
+  }, [fetcher, keepIds, profileId, locationGroupId]);
+
+  const isPruning =
+    fetcher.state !== "idle" &&
+    fetcher.formData?.get("intent") === "prune_to_free";
+
+  /* Helper: short coverage label for the prune list rows. */
+  const coverageLabel = useCallback((rule) => {
+    try {
+      const arr = JSON.parse(rule.countries || "[]");
+      if (!arr.length) return "No coverage";
+      const first = arr[0].restOfWorld
+        ? "Rest of World"
+        : arr[0].name || arr[0].countryCode || "—";
+      return arr.length === 1 ? first : `${first} +${arr.length - 1} more`;
+    } catch {
+      return "";
+    }
+  }, []);
 
   const handleReconnect = useCallback(() => {
     const body = new FormData();
@@ -1350,6 +1528,128 @@ export default function ShippingDashboard() {
         setDeletingZoneId={() => {}}
         onConfirmDelete={() => {}}
       />
+
+      {/* ── Free-plan over-limit enforcement gate ──
+          Shown when a downgraded shop has more rules than the Free plan
+          allows. The merchant must either pick which rules to keep (the rest
+          are permanently deleted) or upgrade. Closing the modal routes to the
+          plan picker, so there's no way to keep more than the limit on Free. */}
+      <Modal
+        open={!!overFreeLimit}
+        onClose={() => navigate(subscriptionHref)}
+        title={`Your plan is now Free — choose up to ${freeRuleLimit} rule${freeRuleLimit === 1 ? "" : "s"} to keep`}
+        primaryAction={{
+          content: isPruning
+            ? "Deleting…"
+            : `Keep ${keepIds.size} · delete the other ${Math.max(rules.length - keepIds.size, 0)}`,
+          destructive: true,
+          onAction: handlePruneToFree,
+          loading: isPruning,
+          disabled:
+            isPruning ||
+            keepIds.size === 0 ||
+            keepIds.size > freeRuleLimit ||
+            !ackPrune,
+        }}
+        secondaryActions={[
+          {
+            content: "Upgrade instead",
+            onAction: () => navigate(subscriptionHref),
+            disabled: isPruning,
+          },
+        ]}
+      >
+        <Modal.Section>
+          <BlockStack gap="400">
+            <Banner tone="warning">
+              <p>
+                Your subscription ended, so this store is back on the{" "}
+                <b>Free</b> plan, which includes{" "}
+                <b>
+                  {freeRuleLimit} rule{freeRuleLimit === 1 ? "" : "s"}
+                </b>
+                . You currently have <b>{rules.length}</b>. Pick the ones to
+                keep below — <b>every other rule will be permanently deleted</b>
+                , and for zone-wise rules their Shopify delivery zone is removed
+                too. To keep them all instead,{" "}
+                <Button variant="plain" url={subscriptionHref}>
+                  upgrade to Advanced or Premium
+                </Button>
+                .
+              </p>
+            </Banner>
+
+            <Text variant="bodySm" tone="subdued">
+              Selected {keepIds.size} of {freeRuleLimit}
+            </Text>
+
+            <div
+              style={{
+                maxHeight: "320px",
+                overflowY: "auto",
+                border: "1px solid var(--border, #E1E3E5)",
+                borderRadius: "8px",
+              }}
+            >
+              <BlockStack gap="0">
+                {[...rules]
+                  .sort((a, b) => (a.name || "").localeCompare(b.name || ""))
+                  .map((r) => {
+                    const checked = keepIds.has(r.id);
+                    const atCap = keepIds.size >= freeRuleLimit;
+                    return (
+                      <Box
+                        key={r.id}
+                        padding="200"
+                        borderBlockEndWidth="025"
+                        borderColor="border"
+                      >
+                        <InlineStack
+                          gap="300"
+                          blockAlign="center"
+                          wrap={false}
+                        >
+                          <Checkbox
+                            label=""
+                            labelHidden
+                            checked={checked}
+                            disabled={(!checked && atCap) || isPruning}
+                            onChange={() => toggleKeep(r.id)}
+                          />
+                          <BlockStack gap="0">
+                            <InlineStack gap="200" blockAlign="center">
+                              <Text variant="bodyMd" fontWeight="semibold">
+                                {r.name}
+                              </Text>
+                              {r.source === "bulk" && (
+                                <Badge tone="attention" size="small">
+                                  Excel
+                                </Badge>
+                              )}
+                              {r.logicType === "DEFAULT" && (
+                                <Badge size="small">Not priced</Badge>
+                              )}
+                            </InlineStack>
+                            <Text tone="subdued" variant="bodySm">
+                              {coverageLabel(r)}
+                            </Text>
+                          </BlockStack>
+                        </InlineStack>
+                      </Box>
+                    );
+                  })}
+              </BlockStack>
+            </div>
+
+            <Checkbox
+              label={`I understand the other ${Math.max(rules.length - keepIds.size, 0)} rule${rules.length - keepIds.size === 1 ? "" : "s"} (and any Shopify delivery zones they own) will be permanently deleted.`}
+              checked={ackPrune}
+              disabled={isPruning}
+              onChange={setAckPrune}
+            />
+          </BlockStack>
+        </Modal.Section>
+      </Modal>
 
       {/* Edit Rule modal — pricing model, currency, rate. Opens from the
           Edit button on each row of the All rates table. */}

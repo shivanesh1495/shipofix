@@ -171,13 +171,29 @@ export const loader = async ({ request }) => {
      When a zone has BOTH our carrier method AND a native Shopify method
      (e.g. "Standard: Free"), customers see both options at checkout and
      can pick the free native rate, bypassing the configured Shipofix rate.
-     Any zone where our carrier is already attached is a zone Shipofix owns —
-     delete the native DeliveryRateDefinition methods so only our rates show.
-     We only run this when the carrier service is active (not disconnected),
-     and never touch the auto-managed bulk-coverage zone. */
+
+     Detection strategy (two layers so neither alone can miss):
+       PRIMARY  — rateProvider.__typename from the GraphQL query.
+                  "DeliveryParticipant"  → carrier-backed (keep)
+                  "DeliveryRateDefinition" → native flat/price rate (delete)
+       FALLBACK — if rateProvider is null/unavailable (some API versions):
+                  method name === "Custom Carrier Shipping" → keep (it's ours)
+                  any other name → delete (native or unknown method)
+
+     Only runs when carrier is active; never touches the auto-managed
+     bulk-coverage zone. */
   if (carrierStatus.state === "success" && profileId && locationGroupId) {
-    /* Collect zones that have at least one carrier (participant) method
-       AND one or more native (rate-definition) methods to purge. */
+    /* Decide whether a method definition belongs to Shipofix's carrier.
+       Returns true  → our method, keep it.
+       Returns false → native or unknown method, delete it. */
+    const isOurCarrierMethod = (m) => {
+      const tp = m.rateProvider?.__typename;
+      if (tp === "DeliveryParticipant") return true;      // primary: API confirmed carrier
+      if (tp === "DeliveryRateDefinition") return false;  // primary: API confirmed native
+      // Fallback: rateProvider not returned — use the name we always assign
+      return m.name === "Custom Carrier Shipping";
+    };
+
     const zonesToPurgeNative = [];
     profiles.forEach(({ node: profile }) => {
       profile.profileLocationGroups.forEach((group) => {
@@ -185,13 +201,17 @@ export const loader = async ({ request }) => {
           const z = zoneNode.zone;
           if (isManagedZoneName(z.name)) return;
           const methods = zoneNode.methodDefinitions?.edges?.map((e) => e.node) || [];
-          const hasCarrier = methods.some(
-            (m) => m.rateProvider?.__typename === "DeliveryParticipant",
-          );
+          if (methods.length === 0) return;
+
+          const hasCarrier = methods.some(isOurCarrierMethod);
           const nativeIds = methods
-            .filter((m) => m.rateProvider?.__typename === "DeliveryRateDefinition")
+            .filter((m) => !isOurCarrierMethod(m))
             .map((m) => m.id);
+
           if (hasCarrier && nativeIds.length > 0) {
+            console.log(
+              `[AUTO-CLEANUP] Zone "${z.name}": found ${nativeIds.length} competing method(s) alongside Shipofix carrier — will remove them so only Shipofix rates show at checkout.`,
+            );
             zonesToPurgeNative.push({ zoneId: z.id, zoneName: z.name, nativeIds });
           }
         });
@@ -219,7 +239,7 @@ export const loader = async ({ request }) => {
         const purgeErrors = purgeJson?.data?.deliveryProfileUpdate?.userErrors || [];
         if (purgeErrors.length === 0) {
           console.log(
-            `[AUTO-CLEANUP] Removed ${nativeIds.length} native method(s) from zone "${zoneName}" — Shipofix now owns all rates for this zone.`,
+            `[AUTO-CLEANUP] Removed ${nativeIds.length} competing method(s) from zone "${zoneName}" — only Shipofix rates will now appear at checkout for this zone.`,
           );
         } else {
           console.error(`[AUTO-CLEANUP] Zone "${zoneName}" purge errors:`, purgeErrors);

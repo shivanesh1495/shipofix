@@ -76,6 +76,12 @@ export const QUERY_DELIVERY_ZONES = `#graphql
                         active
                         rateProvider {
                           __typename
+                          ... on DeliveryParticipant {
+                            id
+                          }
+                          ... on DeliveryRateDefinition {
+                            id
+                          }
                         }
                       }
                     }

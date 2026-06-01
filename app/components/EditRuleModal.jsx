@@ -468,16 +468,32 @@ export default function EditRuleModal({
 
           <Divider />
 
-          {/* Rule name — vendors can rename a rule from this modal too. The
-              server-side action validates non-empty. */}
-          <TextField
-            label="Rule name"
-            value={name}
-            onChange={setName}
-            autoComplete="off"
-            requiredIndicator
-            error={!name.trim() ? "Name can't be empty" : undefined}
-          />
+          {/* Rule name.
+              - Zone-wise rules: name is owned by the Shopify delivery zone. It
+                is synced from Shopify on every page load, so any edit here
+                would be silently reverted. Show it read-only and tell the
+                merchant to use "Change countries" (which calls update_zone
+                and renames the Shopify zone) instead.
+              - Bulk rules: name is free-form and fully editable here. */}
+          {isBulkRule ? (
+            <TextField
+              label="Rule name"
+              value={name}
+              onChange={setName}
+              autoComplete="off"
+              requiredIndicator
+              error={!name.trim() ? "Name can't be empty" : undefined}
+            />
+          ) : (
+            <TextField
+              label="Rule name"
+              value={name}
+              onChange={() => {}}
+              autoComplete="off"
+              disabled
+              helpText={'Zone names are set in Shopify. To rename, open "Change countries" above — the name field there updates the underlying Shopify zone.'}
+            />
+          )}
 
           {/* Pricing model */}
           <Select

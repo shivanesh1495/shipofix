@@ -349,10 +349,10 @@ export const action = async ({ request }) => {
   /* ── Save / update a rule (zone-wise OR bulk-source) ── */
   if (intent === "save_rule") {
     const id = formData.get("id");
-    const name = formData.get("name");
-    const logicType = formData.get("logicType");
-    const rulesJson = formData.get("rulesJson");
-    const currency = formData.get("currency") || "USD";
+    const nameTrimmed = String(formData.get("name") || "").trim();
+    const logicType = String(formData.get("logicType") || "").trim();
+    const rulesJsonRaw = String(formData.get("rulesJson") || "{}");
+    const currency = String(formData.get("currency") || "USD").trim().toUpperCase() || "USD";
 
     if (!id) return { success: false, error: "Missing rule id." };
 
@@ -361,12 +361,41 @@ export const action = async ({ request }) => {
     });
     if (!existing) return { success: false, error: "Rule not found." };
 
+    /* Validate name — only bulk rules can be renamed here. Zone-wise rule
+       names are owned by the Shopify delivery zone and synced by the loader
+       on every page load, so any rename submitted here would be silently
+       reverted. We keep the existing name for shopify-source rules so the
+       Edit modal can't accidentally corrupt it. */
+    if (existing.source === "bulk" && !nameTrimmed) {
+      return { success: false, error: "Rule name can't be empty." };
+    }
+
+    /* Validate logicType — must be a known type or DEFAULT. */
+    const VALID_LOGIC_TYPES = new Set([
+      "DEFAULT", "STANDARD_TIER", "WEIGHT_RANGE", "PRICE_RANGE",
+      "WEIGHT_MULTIPLIER", "WEIGHT_RANGE_PER_KG", "PRICE_MULTIPLIER", "ITEM_MULTIPLIER",
+    ]);
+    if (!VALID_LOGIC_TYPES.has(logicType)) {
+      return { success: false, error: `Unknown pricing model "${logicType}".` };
+    }
+
+    /* Validate rulesJson is parseable JSON. */
+    try {
+      JSON.parse(rulesJsonRaw);
+    } catch {
+      return { success: false, error: "Pricing data is malformed — please re-enter the rate values." };
+    }
+
+    /* For zone-wise rules: name is owned by Shopify; use the stored name.
+       For bulk rules: allow the merchant-supplied name. */
+    const nameToSave = existing.source === "bulk" ? nameTrimmed : existing.name;
+
     await prisma.zoneRule.update({
       where: { id },
-      data: { name, logicType, rulesJson, currency },
+      data: { name: nameToSave, logicType, rulesJson: rulesJsonRaw, currency },
     });
 
-    return { success: true, message: `"${name}" saved.` };
+    return { success: true, message: `"${nameToSave}" saved.` };
   }
 
   /* ── Delete a rule ──
@@ -403,7 +432,14 @@ export const action = async ({ request }) => {
         const res = await admin.graphql(MUTATION_DELIVERY_PROFILE_UPDATE, {
           variables: {
             profileId,
-            profile: { zonesToDelete: [rule.deliveryZoneGid] },
+            profile: {
+              locationGroupsToUpdate: [
+                {
+                  id: locationGroupId,
+                  zonesToDelete: [rule.deliveryZoneGid],
+                },
+              ],
+            },
           },
         });
         const resJson = await res.json();
@@ -447,9 +483,20 @@ export const action = async ({ request }) => {
 
     if (shopifyGids.length > 0) {
       const profileId = formData.get("profileId");
-      if (profileId) {
+      const locationGroupId = formData.get("locationGroupId");
+      if (profileId && locationGroupId) {
         const res = await admin.graphql(MUTATION_DELIVERY_PROFILE_UPDATE, {
-          variables: { profileId, profile: { zonesToDelete: shopifyGids } },
+          variables: {
+            profileId,
+            profile: {
+              locationGroupsToUpdate: [
+                {
+                  id: locationGroupId,
+                  zonesToDelete: shopifyGids,
+                },
+              ],
+            },
+          },
         });
         const resJson = await res.json();
         const errors = resJson?.data?.deliveryProfileUpdate?.userErrors || [];
@@ -483,8 +530,24 @@ export const action = async ({ request }) => {
       services.find((s) => callbackUrl && s.callbackUrl === callbackUrl) ||
       services.find((s) => s.name === CARRIER_SERVICE_NAME);
 
+    /* Carrier not found → already disconnected. Treat as success so the
+       Disconnect button never gets stuck — the end state (no active carrier)
+       is exactly what the user asked for. */
     if (!ours) {
-      return { success: false, error: "No active Shipofix carrier service to disconnect." };
+      return {
+        success: true,
+        message:
+          "Shipofix is already disconnected — your store is using Shopify's native shipping rates.",
+      };
+    }
+
+    /* Already inactive — nothing to do. */
+    if (!ours.active) {
+      return {
+        success: true,
+        message:
+          "Shipofix is already disconnected — your store is using Shopify's native shipping rates.",
+      };
     }
 
     const res = await admin.graphql(MUTATION_UPDATE_CARRIER, {
@@ -503,8 +566,9 @@ export const action = async ({ request }) => {
     };
   }
 
-  /* ── Reconnect Shipofix ── reverse of disconnect: reactivate the carrier
-     service so Shopify resumes calling our endpoint for live rates. */
+  /* ── Reconnect Shipofix ── reactivate the carrier service so Shopify
+     resumes calling our endpoint for live rates. If the service was deleted
+     from Shopify admin entirely, ensureCarrierService recreates it. */
   if (intent === "reconnect") {
     const callbackUrl = getCallbackUrl();
     const queryResponse = await admin.graphql(QUERY_CARRIER_SERVICES);
@@ -515,8 +579,20 @@ export const action = async ({ request }) => {
       services.find((s) => callbackUrl && s.callbackUrl === callbackUrl) ||
       services.find((s) => s.name === CARRIER_SERVICE_NAME);
 
+    /* Carrier was deleted entirely from Shopify admin — recreate it so the
+       merchant doesn't have to refresh or re-install to get back online. */
     if (!ours) {
-      return { success: false, error: "No Shipofix carrier service found to reconnect." };
+      const freshStatus = await ensureCarrierService(admin);
+      if (freshStatus.state === "success") {
+        return {
+          success: true,
+          message: "Shipofix reconnected — your configured rates are live at checkout again.",
+        };
+      }
+      return {
+        success: false,
+        error: freshStatus.message || "Could not recreate the carrier service. Please refresh the page.",
+      };
     }
 
     const res = await admin.graphql(MUTATION_UPDATE_CARRIER, {
@@ -717,6 +793,10 @@ export const action = async ({ request }) => {
 
     if (!profileId || !locationGroupId || !zoneId) {
       return { success: false, error: "Missing required IDs." };
+    }
+
+    if (Object.keys(countryCodes).length === 0) {
+      return { success: false, error: "Please select at least one country." };
     }
 
     const countriesInput = Object.entries(countryCodes).map(([code, data]) => ({

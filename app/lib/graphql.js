@@ -70,7 +70,14 @@ export const QUERY_DELIVERY_ZONES = `#graphql
                   }
                   methodDefinitions(first: 10) {
                     edges {
-                      node { id name active }
+                      node {
+                        id
+                        name
+                        active
+                        rateProvider {
+                          __typename
+                        }
+                      }
                     }
                   }
                 }

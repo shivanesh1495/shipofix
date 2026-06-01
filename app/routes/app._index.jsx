@@ -167,6 +167,69 @@ export const loader = async ({ request }) => {
     }
   }
 
+  /* ── Auto-cleanup: remove native (flat-rate) methods from Shipofix zones ──
+     When a zone has BOTH our carrier method AND a native Shopify method
+     (e.g. "Standard: Free"), customers see both options at checkout and
+     can pick the free native rate, bypassing the configured Shipofix rate.
+     Any zone where our carrier is already attached is a zone Shipofix owns —
+     delete the native DeliveryRateDefinition methods so only our rates show.
+     We only run this when the carrier service is active (not disconnected),
+     and never touch the auto-managed bulk-coverage zone. */
+  if (carrierStatus.state === "success" && profileId && locationGroupId) {
+    /* Collect zones that have at least one carrier (participant) method
+       AND one or more native (rate-definition) methods to purge. */
+    const zonesToPurgeNative = [];
+    profiles.forEach(({ node: profile }) => {
+      profile.profileLocationGroups.forEach((group) => {
+        group.locationGroupZones.edges.forEach(({ node: zoneNode }) => {
+          const z = zoneNode.zone;
+          if (isManagedZoneName(z.name)) return;
+          const methods = zoneNode.methodDefinitions?.edges?.map((e) => e.node) || [];
+          const hasCarrier = methods.some(
+            (m) => m.rateProvider?.__typename === "DeliveryParticipant",
+          );
+          const nativeIds = methods
+            .filter((m) => m.rateProvider?.__typename === "DeliveryRateDefinition")
+            .map((m) => m.id);
+          if (hasCarrier && nativeIds.length > 0) {
+            zonesToPurgeNative.push({ zoneId: z.id, zoneName: z.name, nativeIds });
+          }
+        });
+      });
+    });
+
+    for (const { zoneId, zoneName, nativeIds } of zonesToPurgeNative) {
+      try {
+        const purgeRes = await admin.graphql(MUTATION_DELIVERY_PROFILE_UPDATE, {
+          variables: {
+            profileId,
+            profile: {
+              locationGroupsToUpdate: [
+                {
+                  id: locationGroupId,
+                  zonesToUpdate: [
+                    { id: zoneId, methodDefinitionsToDelete: nativeIds },
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        const purgeJson = await purgeRes.json();
+        const purgeErrors = purgeJson?.data?.deliveryProfileUpdate?.userErrors || [];
+        if (purgeErrors.length === 0) {
+          console.log(
+            `[AUTO-CLEANUP] Removed ${nativeIds.length} native method(s) from zone "${zoneName}" — Shipofix now owns all rates for this zone.`,
+          );
+        } else {
+          console.error(`[AUTO-CLEANUP] Zone "${zoneName}" purge errors:`, purgeErrors);
+        }
+      } catch (purgeErr) {
+        console.error(`[AUTO-CLEANUP] Zone "${zoneName}" exception:`, purgeErr.message);
+      }
+    }
+  }
+
   const uniqueZones = Array.from(zoneMap.values());
 
   /* The auto-managed bulk-coverage zone exists only to make Shopify call our

@@ -78,6 +78,7 @@ export async function ensureCarrierService(admin) {
           message:
             "Shipofix is disconnected — your store is using Shopify's native shipping rates. Reconnect to use the rates you configure here.",
           staleServices: otherStale,
+          carrierServiceId: exactMatch.id,
         };
       }
       return {
@@ -85,6 +86,10 @@ export async function ensureCarrierService(admin) {
         message:
           "Shipofix is connected to your checkout — customers will see the rates you configure here.",
         staleServices: otherStale,
+        /* Surface the resolved id so the loader can attach/reconcile zones
+           without firing its own carrierServices query — one fewer round-trip
+           to Shopify on every dashboard load. */
+        carrierServiceId: exactMatch.id,
       };
     }
 
@@ -105,11 +110,12 @@ export async function ensureCarrierService(admin) {
         state: "success",
         message: "Shipofix reconnected to your checkout.",
         staleServices: otherStale,
+        carrierServiceId: ownStale.id,
       };
     }
 
     // Create fresh
-    await admin.graphql(MUTATION_CREATE_CARRIER, {
+    const createResponse = await admin.graphql(MUTATION_CREATE_CARRIER, {
       variables: {
         input: {
           name: CARRIER_SERVICE_NAME,
@@ -119,17 +125,22 @@ export async function ensureCarrierService(admin) {
         },
       },
     });
+    const createJson = await createResponse.json();
+    const createdId =
+      createJson?.data?.carrierServiceCreate?.carrierService?.id || null;
     return {
       state: "success",
       message:
         "Shipofix is now connected to your checkout — rates you configure here will be used.",
       staleServices: otherStale,
+      carrierServiceId: createdId,
     };
   } catch (error) {
     return {
       state: "warning",
       message: `We couldn't connect Shipofix to your checkout: ${error.message}. Try refreshing — if it keeps happening, contact support.`,
       staleServices: [],
+      carrierServiceId: null,
     };
   }
 }

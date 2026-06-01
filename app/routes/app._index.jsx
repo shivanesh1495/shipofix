@@ -114,58 +114,68 @@ export const loader = async ({ request }) => {
     });
   });
 
-  /* ── Auto-fix: attach carrier service to zones without method definitions ── */
-  if (zonesWithoutMethods.length > 0 && profileId && locationGroupId) {
-    let carrierServiceId = null;
+  /* Resolve the carrier service id ONCE for the whole loader. ensureCarrierService
+     already knows it, so we avoid an extra carrierServices round-trip. Only fall
+     back to a query in the rare case it couldn't be determined (e.g. a transient
+     error during create). */
+  let carrierServiceId = carrierStatus.carrierServiceId || null;
+  const resolveCarrierId = async () => {
+    if (carrierServiceId) return carrierServiceId;
     try {
       const csQuery = await admin.graphql(QUERY_CARRIER_SERVICES);
       const csJson = await csQuery.json();
       const services = csJson?.data?.carrierServices?.edges?.map((e) => e.node) || [];
-      const activeService = services.find((s) => s.active);
-      carrierServiceId = activeService?.id || services[0]?.id || null;
+      carrierServiceId = services.find((s) => s.active)?.id || services[0]?.id || null;
     } catch (_e) {
-      console.error("[AUTO-FIX] Failed to query carrier services:", _e);
+      console.error("[CARRIER] Failed to resolve carrier service id:", _e);
     }
+    return carrierServiceId;
+  };
 
-    if (carrierServiceId) {
-      for (const zoneId of zonesWithoutMethods) {
-        try {
-          const fixRes = await admin.graphql(MUTATION_DELIVERY_PROFILE_UPDATE, {
-            variables: {
-              profileId,
-              profile: {
-                locationGroupsToUpdate: [
-                  {
-                    id: locationGroupId,
-                    zonesToUpdate: [
+  /* ── Auto-fix: attach carrier service to zones without method definitions ──
+     Batched into ONE deliveryProfileUpdate (all zones in a single
+     locationGroupsToUpdate) instead of one round-trip per zone. */
+  if (zonesWithoutMethods.length > 0 && profileId && locationGroupId) {
+    const csId = await resolveCarrierId();
+    if (csId) {
+      try {
+        const fixRes = await admin.graphql(MUTATION_DELIVERY_PROFILE_UPDATE, {
+          variables: {
+            profileId,
+            profile: {
+              locationGroupsToUpdate: [
+                {
+                  id: locationGroupId,
+                  zonesToUpdate: zonesWithoutMethods.map((zoneId) => ({
+                    id: zoneId,
+                    methodDefinitionsToCreate: [
                       {
-                        id: zoneId,
-                        methodDefinitionsToCreate: [
-                          {
-                            name: "Custom Carrier Shipping",
-                            active: true,
-                            participant: {
-                              carrierServiceId,
-                              adaptToNewServices: true,
-                            },
-                          },
-                        ],
+                        name: "Custom Carrier Shipping",
+                        active: true,
+                        participant: {
+                          carrierServiceId: csId,
+                          adaptToNewServices: true,
+                        },
                       },
                     ],
-                  },
-                ],
-              },
+                  })),
+                },
+              ],
             },
-          });
-          const fixJson = await fixRes.json();
-          const fixErrors = fixJson?.data?.deliveryProfileUpdate?.userErrors || [];
-          if (fixErrors.length === 0) {
+          },
+        });
+        const fixJson = await fixRes.json();
+        const fixErrors = fixJson?.data?.deliveryProfileUpdate?.userErrors || [];
+        if (fixErrors.length === 0) {
+          for (const zoneId of zonesWithoutMethods) {
             const z = zoneMap.get(zoneId);
             if (z) z.hasMethodDefinition = true;
           }
-        } catch (fixErr) {
-          console.error(`[AUTO-FIX] Zone ${zoneId} exception:`, fixErr.message);
+        } else {
+          console.error("[AUTO-FIX] userErrors:", fixErrors);
         }
+      } catch (fixErr) {
+        console.error("[AUTO-FIX] exception:", fixErr.message);
       }
     }
   }
@@ -221,7 +231,9 @@ export const loader = async ({ request }) => {
       });
     });
 
-    for (const { zoneId, zoneName, nativeIds } of zonesToPurgeNative) {
+    /* Batched into ONE deliveryProfileUpdate — every zone's native methods
+       deleted in a single round-trip instead of one call per zone. */
+    if (zonesToPurgeNative.length > 0) {
       try {
         const purgeRes = await admin.graphql(MUTATION_DELIVERY_PROFILE_UPDATE, {
           variables: {
@@ -230,9 +242,10 @@ export const loader = async ({ request }) => {
               locationGroupsToUpdate: [
                 {
                   id: locationGroupId,
-                  zonesToUpdate: [
-                    { id: zoneId, methodDefinitionsToDelete: nativeIds },
-                  ],
+                  zonesToUpdate: zonesToPurgeNative.map(({ zoneId, nativeIds }) => ({
+                    id: zoneId,
+                    methodDefinitionsToDelete: nativeIds,
+                  })),
                 },
               ],
             },
@@ -241,14 +254,15 @@ export const loader = async ({ request }) => {
         const purgeJson = await purgeRes.json();
         const purgeErrors = purgeJson?.data?.deliveryProfileUpdate?.userErrors || [];
         if (purgeErrors.length === 0) {
+          const total = zonesToPurgeNative.reduce((n, z) => n + z.nativeIds.length, 0);
           console.log(
-            `[AUTO-CLEANUP] Removed ${nativeIds.length} competing method(s) from zone "${zoneName}" — only Shipofix rates will now appear at checkout for this zone.`,
+            `[AUTO-CLEANUP] Removed ${total} competing method(s) across ${zonesToPurgeNative.length} zone(s) — only Shipofix rates will now appear at checkout.`,
           );
         } else {
-          console.error(`[AUTO-CLEANUP] Zone "${zoneName}" purge errors:`, purgeErrors);
+          console.error("[AUTO-CLEANUP] purge userErrors:", purgeErrors);
         }
       } catch (purgeErr) {
-        console.error(`[AUTO-CLEANUP] Zone "${zoneName}" exception:`, purgeErr.message);
+        console.error("[AUTO-CLEANUP] exception:", purgeErr.message);
       }
     }
   }
@@ -302,23 +316,25 @@ export const loader = async ({ request }) => {
      in the All rates table even before they've picked a pricing model. */
   const missingZones = realZones.filter((z) => !rulesByGid.has(z.id));
   if (missingZones.length > 0) {
-    for (const z of missingZones) {
-      try {
-        await prisma.zoneRule.create({
-          data: {
-            shop: shopDomain,
-            deliveryZoneGid: z.id,
-            name: z.name,
-            countries: JSON.stringify(z.countries),
-            logicType: "DEFAULT",
-            currency: "USD",
-            rulesJson: "{}",
-            source: "shopify",
-          },
-        });
-      } catch (_e) {
-        /* unique constraint failure means another request raced us — fine */
-      }
+    /* One createMany instead of a sequential create-per-zone loop.
+       skipDuplicates makes it race-safe against a concurrent request that
+       already inserted the same (shop, deliveryZoneGid). */
+    try {
+      await prisma.zoneRule.createMany({
+        data: missingZones.map((z) => ({
+          shop: shopDomain,
+          deliveryZoneGid: z.id,
+          name: z.name,
+          countries: JSON.stringify(z.countries),
+          logicType: "DEFAULT",
+          currency: "USD",
+          rulesJson: "{}",
+          source: "shopify",
+        })),
+        skipDuplicates: true,
+      });
+    } catch (_e) {
+      console.error("[PLACEHOLDER] createMany failed:", _e?.message);
     }
   }
 
@@ -336,6 +352,9 @@ export const loader = async ({ request }) => {
         profileId,
         locationGroupId,
         zones: uniqueZones,
+        /* Reuse the already-resolved id so reconcile doesn't fire its own
+           carrierServices query. */
+        carrierServiceId,
       });
     } catch (e) {
       console.error("[COVERAGE] reconcile failed:", e?.message);

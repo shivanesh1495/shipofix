@@ -16,6 +16,7 @@ export const QUERY_CARRIER_SERVICES = `#graphql
 export const MUTATION_CREATE_CARRIER = `#graphql
   mutation CreateCarrierService($input: DeliveryCarrierServiceCreateInput!) {
     carrierServiceCreate(input: $input) {
+      carrierService { id }
       userErrors { message }
     }
   }

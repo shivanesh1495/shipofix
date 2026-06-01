@@ -1,4 +1,10 @@
-import { Outlet, useLoaderData, useRouteError } from "react-router";
+import {
+  Outlet,
+  useLoaderData,
+  useNavigation,
+  useRevalidator,
+  useRouteError,
+} from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { authenticate } from "../shopify.server";
@@ -20,12 +26,31 @@ export const links = () => [
   { rel: "stylesheet", href: customStyles },
 ];
 
+/* Thin indeterminate progress bar pinned to the top of the viewport. Shows
+   whenever React Router is navigating or revalidating a loader — gives instant
+   visual feedback that the app is working while the (network-bound) dashboard
+   loader runs, instead of the page appearing frozen. */
+function TopProgressBar() {
+  const navigation = useNavigation();
+  const revalidator = useRevalidator();
+  const active =
+    navigation.state !== "idle" || revalidator.state === "loading";
+  return (
+    <div
+      className={`global-progress${active ? " global-progress--active" : ""}`}
+      role="progressbar"
+      aria-hidden={!active}
+    />
+  );
+}
+
 export default function App() {
   const { apiKey } = useLoaderData();
 
   return (
     <PolarisProvider i18n={translations}>
       <AppProvider embedded apiKey={apiKey}>
+        <TopProgressBar />
         <s-app-nav>
           <s-link href="/app">Home</s-link>
         </s-app-nav>

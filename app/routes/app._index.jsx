@@ -1188,42 +1188,48 @@ export default function ShippingDashboard() {
             </Banner>
           )}
 
-          {/* ── Status banners ──
-             Connected shops get a "Disconnect" action (hands shipping back to
-             Shopify's native rates); disconnected shops get "Reconnect". The
-             button doubles as the safe escape hatch the delete guards point to
-             when a merchant really does want zero Shipofix rates. */}
+          {/* ── Connection status bar — single line ──
+             Connected: green dot + message + Disconnect button.
+             Disconnected: amber dot + message + Reconnect button.
+             Info/warning states: no action button. */}
           {carrierStatus.message && (
-            <Banner
-              tone={
+            <div
+              className="carrier-status-bar"
+              data-state={
                 carrierStatus.state === "success"
                   ? "success"
                   : carrierStatus.state === "disconnected"
-                    ? "warning"
+                    ? "disconnected"
                     : "info"
               }
-              action={
-                carrierStatus.state === "success"
-                  ? {
-                      content: "Disconnect",
-                      onAction: handleDisconnect,
-                      loading:
-                        fetcher.state !== "idle" &&
-                        fetcher.formData?.get("intent") === "disconnect",
-                    }
-                  : carrierStatus.state === "disconnected"
-                    ? {
-                        content: "Reconnect",
-                        onAction: handleReconnect,
-                        loading:
-                          fetcher.state !== "idle" &&
-                          fetcher.formData?.get("intent") === "reconnect",
-                      }
-                    : undefined
-              }
             >
-              {carrierStatus.message}
-            </Banner>
+              <div className="carrier-status-dot" />
+              <span className="carrier-status-msg">{carrierStatus.message}</span>
+              {carrierStatus.state === "success" && (
+                <Button
+                  size="slim"
+                  onClick={handleDisconnect}
+                  loading={
+                    fetcher.state !== "idle" &&
+                    fetcher.formData?.get("intent") === "disconnect"
+                  }
+                >
+                  Disconnect
+                </Button>
+              )}
+              {carrierStatus.state === "disconnected" && (
+                <Button
+                  size="slim"
+                  onClick={handleReconnect}
+                  loading={
+                    fetcher.state !== "idle" &&
+                    fetcher.formData?.get("intent") === "reconnect"
+                  }
+                >
+                  Reconnect
+                </Button>
+              )}
+            </div>
           )}
 
           {carrierStatus.staleServices?.length > 0 && (

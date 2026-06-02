@@ -316,10 +316,11 @@ export default function BulkEditDocs({ open, onClose }) {
                 </ul>
               </li>
               <li>
-                <b>Save and upload.</b> The upload replaces every existing
-                bulk-edit rule for the shop — rules you left out are reset to
-                Shopify Default. Your zone-wise rules in Configuration Logic
-                are not touched.
+                <b>Save and upload.</b> The upload <b>merges</b>: a rule Name in
+                the file updates (or creates) that rule; bulk rules you left out
+                keep working unchanged. Set a rule&apos;s Logic # to 0 to reset
+                it to Shopify Default. Your zone-wise rules in Configuration
+                Logic are not touched.
               </li>
             </ol>
           </BlockStack>

@@ -5,8 +5,9 @@
  * Empty Logic # rows are skipped — existing rules stay untouched.
  *
  * Uploaded rules are written into ZoneRule with source='bulk' and live
- * alongside one-by-one zone rules. Re-uploading replaces every previously-
- * uploaded bulk rule but never touches zone-wise rules.
+ * alongside one-by-one zone rules. Uploads MERGE: a rule Name updates (or
+ * creates) that rule, Logic # 0 removes it, and bulk rules the file doesn't
+ * name are left untouched. Zone-wise rules are never touched.
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -107,9 +108,10 @@ export default function BulkEdit({ onToast, onApplied }) {
         <Banner tone="success" title={lastResult.message}>
           <Text variant="bodySm">
             {lastResult.summary.updated} rule
-            {lastResult.summary.updated === 1 ? "" : "s"} created
+            {lastResult.summary.updated === 1 ? "" : "s"} saved
             {typeof lastResult.summary.wiped === "number" &&
-              ` · ${lastResult.summary.wiped} previous rule${lastResult.summary.wiped === 1 ? "" : "s"} cleared`}
+              lastResult.summary.wiped > 0 &&
+              ` · ${lastResult.summary.wiped} reset to default`}
           </Text>
           {lastResult.errors && lastResult.errors.length > 0 && (
             <Box paddingBlockStart="200">
@@ -214,8 +216,10 @@ export default function BulkEdit({ onToast, onApplied }) {
                 <BlockStack gap="100">
                   <Text variant="headingMd" as="h3">Step 2 · Upload the filled template</Text>
                   <Text tone="subdued">
-                    Uploading replaces every previously-uploaded rule for this
-                    shop. Rules you created one-by-one from the All rates tab
+                    Uploading <b>merges</b>: a rule Name in the file updates (or
+                    creates) that rule; bulk rules you leave out keep working
+                    unchanged. Set a rule&apos;s Logic # to 0 to reset it to
+                    Shopify Default. Rules you created one-by-one from the All rates tab
                     are untouched.
                   </Text>
                 </BlockStack>

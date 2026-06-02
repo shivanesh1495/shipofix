@@ -1946,9 +1946,10 @@ export default function ShippingDashboard() {
                 coverage is the union of their country/zone cells.
               </li>
               <li>
-                <b>Upload the file</b> — Shipofix replaces every
-                previously-uploaded rule with what you uploaded. Your
-                zone-wise rules (created via <i>Add new zone</i>) are never
+                <b>Upload the file</b> — Shipofix <b>merges</b> it: each rule
+                Name updates (or creates) that rule, and bulk rules you leave
+                out keep working unchanged (Logic # 0 resets one to default).
+                Your zone-wise rules (created via <i>Add new zone</i>) are never
                 touched.
               </li>
             </ol>

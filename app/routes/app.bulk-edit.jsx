@@ -16,8 +16,9 @@
  *
  * Bulk-edit rules share the ZoneRule table with one-by-one zone rules. They
  * are distinguished by `source = 'bulk'` and a synthetic `bulk:<slug>` GID.
- * Re-uploading an Excel file replaces every existing bulk rule for the shop
- * but never touches zone-wise rules (source = 'shopify').
+ * Uploads MERGE: a Name in the file updates (or creates) that rule, Logic # 0
+ * removes it, and any bulk rule the file doesn't mention is left untouched.
+ * Zone-wise rules (source = 'shopify') are never touched.
  */
 
 import * as XLSX from "xlsx";
@@ -546,7 +547,7 @@ const INSTRUCTIONS_ROWS = [
   [7, "Weight Tiered Per-KG", "Rate Bands sheet (one row per slab)", "Min / Max are kg. Rate column is per-kg. Charge = cart weight × matching band's rate."],
   [],
   ["Notes"],
-  ["• Uploading replaces every existing bulk-edit rule for the shop — rules you leave out are reset to Shopify Default."],
+  ["• Uploading MERGES: a Name in the file updates (or creates) that rule; rules you leave out keep working unchanged. Set Logic # to 0 to reset a rule to Shopify Default."],
   ["• Bulk Edit never creates or deletes Shopify zones — manage zones from the dashboard."],
   ["• Zone-wise rules (Configuration Logic tab) are untouched and resume the moment Bulk Edit is turned off."],
   ["• The All Regions sheet lists every country and its states / provinces for reference."],
@@ -1402,9 +1403,8 @@ export const action = async ({ request }) => {
   }
 
   /* Guard: if the file has no usable rows (no Name AND no Logic #), refuse
-     the upload — applying it would silently wipe every rule for the shop
-     and create nothing in return. This is what happened when the blank
-     template was uploaded as-is. */
+     the upload — there's nothing to apply, so it's almost certainly a blank
+     template uploaded by mistake. */
   const hasUsableRow = rawRows.slice(1).some((r) => {
     const name = String(r[0] || "").trim();
     const logic = String(r[3] ?? "").trim();
@@ -1414,15 +1414,15 @@ export const action = async ({ request }) => {
     return {
       success: false,
       error:
-        "Uploaded file has no rows with a Name or Logic # filled in. Fill at least one row before uploading — otherwise the upload would wipe every existing rule.",
+        "Uploaded file has no rows with a Name or Logic # filled in. Fill at least one row before uploading — there's nothing to apply.",
     };
   }
 
-  /* Replace semantics, scoped to bulk-source rules only. Zone-wise rules
-     (source='shopify') are untouched, so an Excel upload never wipes
-     rules the user set up via the one-by-one editor. The wipe is
-     deferred until AFTER full validation succeeds — if any rule has an
-     error, nothing is touched. */
+  /* Merge semantics, scoped to bulk-source rules only. Only the rules this
+     file names are updated/created; a Logic-0 row removes that one rule; every
+     other existing bulk rule is left in place. Zone-wise rules
+     (source='shopify') are never touched. All writes are deferred until AFTER
+     full validation succeeds — if any rule has an error, nothing is touched. */
   if (!prisma.bulkEditUpload) {
     return {
       success: false,
@@ -1619,6 +1619,11 @@ export const action = async ({ request }) => {
      with a half-applied ruleset (or, worse, an empty one after a wipe). */
   const summary = { updated: 0, reset: 0, skipped: 0, errors: [], warnings: [] };
   const rulesToWrite = [];
+  /* Merge semantics: only rules NAMED in this file are touched. A Logic # 0
+     row explicitly removes that one rule (reset to Shopify Default); its gid
+     is collected here so the commit phase deletes exactly it — never the
+     whole bulk ruleset. */
+  const resetGids = [];
   /* Seed errors with any row-level issues already collected from the Rate
      Bands sheet. They're processed before the per-rule loop so vendors see
      spreadsheet row numbers alongside rule-level errors. */
@@ -1659,10 +1664,12 @@ export const action = async ({ request }) => {
       continue;
     }
 
-    /* Logic # = 0 → reset (the wipe above already removed it). Warn if the
-       vendor also filled a Rate or bands — those will be discarded. */
+    /* Logic # = 0 → reset: explicitly delete this one rule in the commit
+       phase. Warn if the vendor also filled a Rate or bands — those will be
+       discarded. */
     if (logicNum === 0) {
       summary.reset += 1;
+      resetGids.push(ruleNameToGid(name));
       if (g.rateRows.length || g.bands.length) {
         summary.warnings.push(
           `Rule "${name}": Logic # 0 (reset) — Rate / Rate Bands rows for this rule were discarded.`,
@@ -1756,9 +1763,9 @@ export const action = async ({ request }) => {
       }
     }
 
-    /* Currency: explicit > USD. (The previous bulk-rule row isn't consulted
-       because the apply phase wipes the whole bulk-edit ruleset before
-       writing — there's no prior currency to inherit.) */
+    /* Currency: explicit > USD. A rule re-uploaded under the same Name fully
+       replaces its own stored row (via upsert), so its currency comes from
+       this file, not the prior value. */
     const gid = ruleNameToGid(name);
     const currency = [...g.currencies][0] || "USD";
     /* Reject typos like "USC" that an older template (without the Currency
@@ -1933,6 +1940,19 @@ export const action = async ({ request }) => {
   const existingShopifyRules = await prisma.zoneRule.findMany({
     where: { shop: shopDomain, source: "shopify" },
   });
+  /* Merge semantics: bulk rules NOT named in this upload survive untouched, so
+     they're part of the final ruleset and must be considered when checking for
+     duplicate coverage. A rule re-uploaded under the same Name (same gid) just
+     updates itself, and a Logic-0 reset removes one — exclude both. */
+  const writeGids = new Set(rulesToWrite.map((r) => r.gid));
+  const resetGidSet = new Set(resetGids);
+  const existingBulkRules = await prisma.zoneRule.findMany({
+    where: { shop: shopDomain, source: "bulk" },
+  });
+  const keptBulkRules = existingBulkRules.filter(
+    (r) =>
+      !writeGids.has(r.deliveryZoneGid) && !resetGidSet.has(r.deliveryZoneGid),
+  );
   const allCountriesByCode = new Map(ALL_COUNTRIES.map((c) => [c.code, c]));
 
   for (const r of rulesToWrite) {
@@ -1975,6 +1995,12 @@ export const action = async ({ request }) => {
     const k = coverageKey(s.countries);
     if (k) keyToRule.set(k, { source: "zone-wise", name: s.name });
   }
+  /* Kept bulk rules (not in this upload) stay live, so a newly uploaded rule
+     can't be allowed to duplicate their coverage either. */
+  for (const s of keptBulkRules) {
+    const k = coverageKey(s.countries);
+    if (k && !keyToRule.has(k)) keyToRule.set(k, { source: "bulk", name: s.name });
+  }
   for (const r of rulesToWrite) {
     const k = coverageKey(r.countries);
     if (!k) continue;
@@ -2002,19 +2028,27 @@ export const action = async ({ request }) => {
   }
 
   /* ── Commit phase ───────────────────────────────────────────────────
-     Wipe the bulk-source ruleset only (zone-wise rules with
-     source='shopify' are NOT touched) after we know every rule is valid,
-     then write the queued rules. */
-  /* Wipe + rewrite must be atomic: if it ran as a bare deleteMany followed by
-     a loop of upserts, a crash partway through would leave the shop with its
-     old bulk rules gone and only some of the new ones written. Bundle every
-     operation into one transaction so the ruleset either flips fully to the
-     new upload or stays exactly as it was. */
-  const [wipedCount] = await prisma.$transaction([
-    prisma.zoneRule.deleteMany({
-      where: { shop: shopDomain, source: "bulk" },
-    }),
-    ...rulesToWrite.map((r) =>
+     MERGE semantics: only the rules this file NAMES are touched. Rules upsert
+     by gid (so a re-uploaded Name updates in place); Logic-0 names are deleted;
+     every other existing bulk rule is left exactly as it was. Zone-wise rules
+     (source='shopify') are never touched.
+
+     The delete + upserts run in one transaction so the change is atomic — a
+     crash partway through can't leave a half-applied ruleset. */
+  const writeOps = [];
+  if (resetGids.length > 0) {
+    writeOps.push(
+      prisma.zoneRule.deleteMany({
+        where: {
+          shop: shopDomain,
+          source: "bulk",
+          deliveryZoneGid: { in: resetGids },
+        },
+      }),
+    );
+  }
+  for (const r of rulesToWrite) {
+    writeOps.push(
       prisma.zoneRule.upsert({
         where: {
           shop_deliveryZoneGid: { shop: shopDomain, deliveryZoneGid: r.gid },
@@ -2038,39 +2072,52 @@ export const action = async ({ request }) => {
           source: "bulk",
         },
       }),
-    ),
-  ]);
+    );
+  }
+  const txResults = writeOps.length ? await prisma.$transaction(writeOps) : [];
+  /* deleteMany (when present) is the first op — its count is how many rules
+     were reset to default. */
+  const resetCount = resetGids.length > 0 ? (txResults[0]?.count ?? 0) : 0;
   summary.updated = rulesToWrite.length;
 
-  /* Cache the file so vendors can re-download exactly what they uploaded.
-     Re-uploading replaces the cached copy. */
+  /* Cache a workbook of the FULL current bulk ruleset (not just this upload).
+     Under merge semantics the uploaded file is only a partial — but the
+     "Last uploaded file" download and the inline-edit / delete paths all treat
+     the stored blob as the complete bulk ruleset, so regenerate it from every
+     bulk rule that now exists. Keeps the cached file in sync no matter which
+     subset of rules a vendor uploads. */
   const filename = (typeof file.name === "string" && file.name) || "bulk-edit.xlsx";
+  const allBulkRules = await prisma.zoneRule.findMany({
+    where: { shop: shopDomain, source: "bulk" },
+  });
+  const cacheBuf = allBulkRules.length
+    ? await buildWorkbookFromBulkRules(allBulkRules)
+    : fileBuf;
   await prisma.bulkEditUpload.upsert({
     where: { shop: shopDomain },
     update: {
       filename,
-      size: fileBuf.length,
-      data: fileBuf,
+      size: cacheBuf.length,
+      data: cacheBuf,
       uploadedAt: new Date(),
     },
     create: {
       shop: shopDomain,
       filename,
-      size: fileBuf.length,
-      data: fileBuf,
+      size: cacheBuf.length,
+      data: cacheBuf,
     },
   });
 
-  /* Summary reflects the bulk-edit ruleset only — zone-wise rules are
-     untouched. */
-  const skippedOrReset = summary.reset + summary.skipped;
+  /* Summary reflects the bulk-edit ruleset only — zone-wise rules and bulk
+     rules this file didn't name are untouched. */
   const parts = [];
-  if (summary.updated) parts.push(`${summary.updated} bulk rule${summary.updated === 1 ? "" : "s"} created`);
-  if (skippedOrReset) parts.push(`${skippedOrReset} rule${skippedOrReset === 1 ? "" : "s"} left on default`);
-  if (wipedCount.count) parts.push(`${wipedCount.count} previous bulk rule${wipedCount.count === 1 ? "" : "s"} replaced`);
+  if (summary.updated) parts.push(`${summary.updated} bulk rule${summary.updated === 1 ? "" : "s"} saved`);
+  if (resetCount) parts.push(`${resetCount} reset to default`);
+  if (summary.skipped) parts.push(`${summary.skipped} left unchanged`);
   const message =
-    summary.updated === 0 && skippedOrReset === 0
-      ? "Upload processed — no rules were created."
+    summary.updated === 0 && resetCount === 0
+      ? "Upload processed — no rules were changed."
       : `Bulk edit applied · ${parts.join(" · ")}.`;
 
   return {
@@ -2078,7 +2125,7 @@ export const action = async ({ request }) => {
     message,
     errors: summary.errors,
     warnings: summary.warnings,
-    summary: { ...summary, wiped: wipedCount.count },
+    summary: { ...summary, wiped: resetCount },
     logicLabels: LOGIC_LABELS,
   };
 };

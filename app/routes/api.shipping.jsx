@@ -213,7 +213,13 @@ export const action = async ({ request }) => {
     await log({ event: "RATE_CALCULATED", calculatedRate, serviceName, serviceCode });
 
     if (calculatedRate !== null && Number.isFinite(calculatedRate) && calculatedRate >= 0) {
-      const currency = rate.currency || matchedRule.currency || "USD";
+      /* The amount was calculated in the RULE's currency (the merchant sets it
+         per-rule — e.g. a USD rule yields a USD figure). Label the response
+         with that same currency so Shopify converts correctly to the buyer's
+         presentment currency. Using rate.currency (the shop's base currency)
+         here mislabels a cross-currency rule's amount — e.g. "225" computed in
+         USD gets tagged INR on an INR store and FX-shrunk at checkout. */
+      const currency = matchedRule.currency || rate.currency || "USD";
       const rateInSubunits = Math.round(calculatedRate * 100).toString();
 
       const responseBody = {

@@ -2,7 +2,7 @@
 
 client_id = "36e9a19a95668d505485fe62e5c6171a"
 name = "Shipofix"
-application_url = "https://example.com"
+application_url = "https://shipofix-production.up.railway.app"
 embedded = true
 
 [build]
@@ -26,4 +26,8 @@ optional_scopes = [ ]
 use_legacy_install_flow = false
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
+redirect_urls = [
+  "https://shipofix-production.up.railway.app/auth/callback",
+  "https://shipofix-production.up.railway.app/auth/shopify/callback",
+  "https://shipofix-production.up.railway.app/api/auth/callback"
+]

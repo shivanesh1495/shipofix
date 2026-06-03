@@ -476,9 +476,7 @@ export const action = async ({ request }) => {
         variables: {
           profileId,
           profile: {
-            locationGroupsToUpdate: [
-              { id: locationGroupId, zonesToDelete: shopifyGids },
-            ],
+            zonesToDelete: shopifyGids,
           },
         },
       });
@@ -597,12 +595,7 @@ export const action = async ({ request }) => {
           variables: {
             profileId,
             profile: {
-              locationGroupsToUpdate: [
-                {
-                  id: locationGroupId,
-                  zonesToDelete: [rule.deliveryZoneGid],
-                },
-              ],
+              zonesToDelete: [rule.deliveryZoneGid],
             },
           },
         });
@@ -653,12 +646,7 @@ export const action = async ({ request }) => {
           variables: {
             profileId,
             profile: {
-              locationGroupsToUpdate: [
-                {
-                  id: locationGroupId,
-                  zonesToDelete: shopifyGids,
-                },
-              ],
+              zonesToDelete: shopifyGids,
             },
           },
         });

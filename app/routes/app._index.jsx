@@ -21,7 +21,7 @@ import {
   getCallbackUrl,
   CARRIER_SERVICE_NAME,
 } from "../lib/carrier.server.js";
-import { getEntitledPlan } from "../lib/billing.server.js";
+import { getEntitledPlan, reconcileEntitlement } from "../lib/billing.server.js";
 import {
   reconcileBulkCoverageZone,
   isManagedZoneName,
@@ -49,7 +49,7 @@ import BulkEdit from "../components/BulkEdit";
 /* ───────────────────────────── Loader ──────────────────────────────── */
 
 export const loader = async ({ request }) => {
-  const { admin, session } = await authenticate.admin(request);
+  const { admin, session, billing } = await authenticate.admin(request);
   const shopDomain = session.shop;
 
   /* Gate the dashboard behind plan selection — first-time visitors land on
@@ -57,10 +57,11 @@ export const loader = async ({ request }) => {
      Preserve the embedded ?shop=&host=&embedded= query string on the
      redirect; without them the iframe loses Shopify context and the
      framework bounces to /auth/login. */
-  /* getEntitledPlan == getShopPlan when billing is off. When billing is on it
-     downgrades a paid tier to Free unless a Razorpay subscription is active,
-     so an unpaid shop can never reach the paid dashboard features. */
-  const plan = await getEntitledPlan(shopDomain);
+  /* reconcileEntitlement asks the Shopify Billing API for the shop's live
+     subscription state and caches it in AppSetting.plan: an active paid tier is
+     granted, a lapsed/cancelled one is downgraded to Free. An unpaid shop can
+     therefore never reach the paid dashboard features. */
+  const plan = await reconcileEntitlement(billing, shopDomain);
   if (!plan) {
     const search = new URL(request.url).search;
     throw redirect(`/app/subscription${search}`);

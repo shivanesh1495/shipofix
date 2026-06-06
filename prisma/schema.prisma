@@ -62,29 +62,25 @@ model AppSetting {
   /// "free" | "advanced" | "premium". Null = user hasn't picked a plan yet,
   /// gates the dashboard behind /app/subscription on first load.
   ///
-  /// IMPORTANT (billing): when BILLING_ENABLED=true this column is the paid
-  /// ENTITLEMENT, not just a UI choice. A paid tier (advanced/premium) is
-  /// written here ONLY after Razorpay confirms payment via webhook, so every
-  /// existing `getShopPlan`-based gate across the app enforces payment with no
-  /// extra checks. When billing is disabled the picker writes it directly
-  /// (current behaviour). See app/lib/billing.server.js.
+  /// IMPORTANT (billing): this column is the CACHED paid ENTITLEMENT, not just a
+  /// UI choice. It is kept in sync with the shop's real Shopify Billing API
+  /// subscription by reconcileEntitlement() (on every dashboard load) and the
+  /// app_subscriptions/update webhook, so every `getShopPlan`-based gate across
+  /// the app enforces payment with no extra checks. The truth lives in Shopify;
+  /// a lapsed/cancelled subscription is downgraded to "free" on the next load.
+  /// See app/lib/billing.server.js.
   plan      String?
 
-  /* ── Razorpay billing columns (dormant until BILLING_ENABLED=true) ──
-     All nullable so they're a no-op for the current free-for-all mode; the
-     billing code in app/lib/billing.server.js is the only reader/writer. */
-  /// "active" | "pending" | "cancelled" | null. Source of truth for whether a
-  /// paid subscription is currently entitling this shop.
+  /* ── Legacy billing columns (UNUSED) ──
+     Left in place from a previous off-platform (Razorpay) billing experiment
+     that was removed in favour of the Shopify Billing API. All nullable and
+     no longer read or written by any code. Kept to avoid a destructive
+     migration; safe to drop in a future migration. */
   billingStatus           String?
-  /// The paid tier the Razorpay subscription is for ("advanced"|"premium").
   billingPlan             String?
-  /// Razorpay subscription id (sub_xxx) — used to reconcile webhook events.
   razorpaySubscriptionId  String?
-  /// Razorpay customer id (cust_xxx), if a customer was created.
   razorpayCustomerId      String?
-  /// End of the currently-paid billing period (from subscription.charged).
   billingCurrentPeriodEnd DateTime?
-  /// Last time any billing column changed — for support/debugging.
   billingUpdatedAt        DateTime?
 
   createdAt DateTime @default(now())

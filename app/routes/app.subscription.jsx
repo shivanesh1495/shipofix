@@ -1,15 +1,23 @@
 /**
  * /app/subscription — plan picker page.
  *
- * Shown automatically as the "first page" when a shop hasn't selected a
- * plan yet (the /app loader redirects here). Once a tier is picked, the
- * choice is written to AppSetting.plan and the user lands on /app.
+ * Shown automatically as the "first page" when a shop hasn't selected a plan
+ * yet (the /app loader redirects here). Plans are charged through the
+ * **Shopify Billing API**:
  *
- * No real billing call — this is a pure UI gate that drives feature
- * availability across the rest of the app.
+ *   • Free      — granted instantly (no charge). Any active paid subscription
+ *                 is cancelled first.
+ *   • Advanced/ — `billing.request` creates an AppSubscription and the merchant
+ *     Premium     is redirected to Shopify's NATIVE approval/confirmation
+ *                 screen. The tier is granted only after Shopify confirms the
+ *                 charge (reconciled on return + via the
+ *                 app_subscriptions/update webhook).
+ *
+ * There is no off-platform billing and no client-trusted "switch the plan on
+ * the UI" path — selecting a paid tier always leaves the app for Shopify's
+ * approval screen.
  */
 
-import { useEffect } from "react";
 import { redirect, useFetcher, useLoaderData } from "react-router";
 import {
   Badge,
@@ -25,31 +33,25 @@ import {
 } from "@shopify/polaris";
 import { CheckIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
-import { getShopPlan, setShopPlan } from "../lib/plan.server.js";
+import { setShopPlan } from "../lib/plan.server.js";
 import { FREE_ZONE_LIMIT, PLANS, VALID_PLANS } from "../lib/plan.js";
 import {
-  isBillingEnabled,
-  isPaidPlan,
+  isBillingTest,
+  billingPlanName,
   BILLING_PRICING,
-  getBillingState,
-  hasActiveSubscription,
-  markSubscriptionPending,
+  reconcileEntitlement,
 } from "../lib/billing.server.js";
-import { createSubscription, cancelSubscription } from "../lib/razorpay.server.js";
 
 export const loader = async ({ request }) => {
-  const { session } = await authenticate.admin(request);
-  const currentPlan = await getShopPlan(session.shop);
-  /* When billing is on the cards show real prices; off → "$0" as today. */
-  return {
-    currentPlan,
-    billingEnabled: isBillingEnabled(),
-    pricing: BILLING_PRICING,
-  };
+  const { session, billing } = await authenticate.admin(request);
+  /* Reconcile against Shopify so the "Current plan" badge reflects the real
+     subscription state (e.g. after returning from the approval screen). */
+  const currentPlan = await reconcileEntitlement(billing, session.shop);
+  return { currentPlan, pricing: BILLING_PRICING };
 };
 
 export const action = async ({ request }) => {
-  const { session } = await authenticate.admin(request);
+  const { session, billing } = await authenticate.admin(request);
   const shop = session.shop;
   const formData = await request.formData();
   const plan = String(formData.get("plan") || "").trim();
@@ -58,69 +60,59 @@ export const action = async ({ request }) => {
     return { success: false, error: `Unknown plan "${plan}".` };
   }
 
-  /* ── Billing OFF → original behaviour: grant the plan immediately, free. ── */
-  if (!isBillingEnabled()) {
-    await setShopPlan(shop, plan);
-    /* Preserve the embedded ?shop=&host=&embedded= so the iframe keeps
-       Shopify context. */
-    const search = new URL(request.url).search;
-    return redirect(`/app${search}`);
-  }
-
-  /* ── Billing ON ──────────────────────────────────────────────────────── */
+  /* Preserve the embedded ?shop=&host=&embedded= so the iframe keeps Shopify
+     context on any in-app redirect. */
   const search = new URL(request.url).search;
+  const isTest = isBillingTest();
 
-  // Free is always granted instantly; cancel any paid subscription first.
+  /* ── Free → cancel any paid subscription, then grant Free instantly. ──── */
   if (plan === PLANS.FREE) {
-    const st = await getBillingState(shop);
-    if (st?.razorpaySubscriptionId && st?.billingStatus === "active") {
-      try {
-        await cancelSubscription(st.razorpaySubscriptionId);
-      } catch (err) {
-        console.error("[subscription] cancel on downgrade failed:", err);
+    try {
+      const check = await billing.check({
+        plans: [billingPlanName(PLANS.ADVANCED), billingPlanName(PLANS.PREMIUM)],
+        isTest,
+      });
+      for (const sub of check.appSubscriptions || []) {
+        await billing.cancel({ subscriptionId: sub.id, isTest, prorate: true });
       }
+    } catch (err) {
+      console.error("[subscription] cancel on downgrade failed:", err?.message);
     }
     await setShopPlan(shop, PLANS.FREE);
     return redirect(`/app${search}`);
   }
 
-  // Paid tier already active → nothing to pay, go to the dashboard.
-  if (isPaidPlan(plan) && (await hasActiveSubscription(shop, plan))) {
-    return redirect(`/app${search}`);
-  }
-
-  // Switching tiers (or retrying): cancel any existing subscription first so
-  // the merchant can never end up paying for two subscriptions at once.
-  const prior = await getBillingState(shop);
-  if (prior?.razorpaySubscriptionId) {
-    try {
-      await cancelSubscription(prior.razorpaySubscriptionId);
-    } catch (err) {
-      console.error("[subscription] cancel of prior subscription failed:", err);
-    }
-  }
-
-  // Start a Razorpay subscription and hand the checkout URL back to the
-  // client. The plan is NOT granted here — only the verified webhook
-  // (subscription.activated/charged) grants it.
+  /* ── Paid tier ──────────────────────────────────────────────────────── */
+  // Already subscribed to this exact tier → just sync and go to the dashboard.
   try {
-    const sub = await createSubscription({ plan, shop });
-    await markSubscriptionPending(shop, { plan, subscriptionId: sub.id });
-    return { success: true, redirectUrl: sub.short_url };
+    const check = await billing.check({
+      plans: [billingPlanName(plan)],
+      isTest,
+    });
+    if (check.hasActivePayment) {
+      await setShopPlan(shop, plan);
+      return redirect(`/app${search}`);
+    }
   } catch (err) {
-    console.error("[subscription] create failed:", err);
-    return {
-      success: false,
-      error: "Couldn't start checkout right now. Please try again, or contact support.",
-    };
+    console.error("[subscription] pre-check failed:", err?.message);
   }
+
+  /* Create the subscription and hand off to Shopify's NATIVE approval screen.
+     `billing.request` THROWS a redirect (out of the embedded iframe, via App
+     Bridge) to the confirmation URL — it never returns. The plan is NOT granted
+     here; it's granted on return once Shopify confirms the charge. */
+  return billing.request({
+    plan: billingPlanName(plan),
+    isTest,
+    // returnUrl omitted → defaults to the embedded app home, which reconciles
+    // the now-active subscription into AppSetting.plan on load.
+  });
 };
 
 const PLAN_CARDS = [
   {
     id: PLANS.FREE,
     name: "Free",
-    price: "$0",
     blurb: "Try Shipofix on a small set of zones.",
     features: [
       `Up to ${FREE_ZONE_LIMIT} shipping zones`,
@@ -134,7 +126,6 @@ const PLAN_CARDS = [
   {
     id: PLANS.ADVANCED,
     name: "Advanced",
-    price: "$0",
     blurb: "Unlimited zones — manual editing only.",
     features: [
       "Unlimited shipping zones",
@@ -148,7 +139,6 @@ const PLAN_CARDS = [
   {
     id: PLANS.PREMIUM,
     name: "Premium",
-    price: "$0",
     blurb: "Everything — including the Excel bulk-edit workflow.",
     features: [
       "Unlimited shipping zones",
@@ -161,32 +151,21 @@ const PLAN_CARDS = [
   },
 ];
 
-/** Render a price from a {amount(cents), currency} config. */
+/** Render a price from a {amount(dollars), currency} config. */
 function formatPrice(cfg) {
   if (!cfg) return "$0";
   const symbol = cfg.currency === "USD" ? "$" : `${cfg.currency} `;
-  return `${symbol}${(cfg.amount / 100).toFixed(2).replace(/\.00$/, "")}`;
+  return `${symbol}${cfg.amount}`;
 }
 
 export default function SubscriptionPage() {
-  const { currentPlan, billingEnabled, pricing } = useLoaderData();
+  const { currentPlan, pricing } = useLoaderData();
   const fetcher = useFetcher();
 
   const submittingPlan =
     fetcher.state !== "idle"
       ? String(fetcher.formData?.get("plan") || "")
       : null;
-
-  /* When billing is on, a paid-tier selection comes back with a Razorpay
-     hosted-checkout URL instead of redirecting. Open it at the top level so we
-     escape the Shopify admin iframe (Razorpay blocks being framed). In a fully
-     embedded flow you'd use App Bridge's Redirect.Action.REMOTE; window.open is
-     used here to keep the dormant feature dependency-free. */
-  useEffect(() => {
-    if (fetcher.data?.redirectUrl) {
-      window.open(fetcher.data.redirectUrl, "_blank", "noopener,noreferrer");
-    }
-  }, [fetcher.data]);
 
   const checkoutError = fetcher.data?.success === false ? fetcher.data.error : null;
 
@@ -200,9 +179,10 @@ export default function SubscriptionPage() {
                 Choose your Shipofix plan
               </Text>
               <Text tone="subdued" variant="bodyLg">
-                {billingEnabled
-                  ? "Pick a tier to unlock the matching set of features. Paid plans are billed monthly through Razorpay; you can change or cancel any time."
-                  : "Pick a tier to unlock the matching set of features. You can change plans at any time from this screen — no billing is charged."}
+                Pick a tier to unlock the matching set of features. Paid plans
+                are billed monthly through Shopify — choosing one takes you to
+                Shopify&apos;s secure approval screen to confirm the
+                subscription. You can change or cancel any time.
               </Text>
             </BlockStack>
           </Box>
@@ -217,12 +197,8 @@ export default function SubscriptionPage() {
             {PLAN_CARDS.map((p) => {
               const isCurrent = currentPlan === p.id;
               const isPopular = p.badge === "Most popular";
-              /* Price shown: free always $0; paid tiers show their real price
-                 only when billing is enabled, otherwise $0 (current free mode). */
               const priceLabel =
-                billingEnabled && p.id !== PLANS.FREE
-                  ? formatPrice(pricing?.[p.id])
-                  : "$0";
+                p.id === PLANS.FREE ? "$0" : formatPrice(pricing?.[p.id]);
               return (
                 <div
                   key={p.id}
@@ -290,7 +266,11 @@ export default function SubscriptionPage() {
                             disabled={isCurrent || submittingPlan !== null}
                             loading={submittingPlan === p.id}
                           >
-                            {isCurrent ? "You're on this plan" : p.cta}
+                            {isCurrent
+                              ? "You're on this plan"
+                              : p.id !== PLANS.FREE
+                                ? `${p.cta} — confirm on Shopify`
+                                : p.cta}
                           </Button>
                         </fetcher.Form>
                       </Box>

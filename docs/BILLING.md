@@ -1,79 +1,64 @@
-# Razorpay Billing — Setup & Operations
+# Billing — Shopify Billing API
 
-Billing is **off by default**. The app runs exactly as it does today (every plan
-free, picker grants instantly) until you flip one switch. Nothing is commented
-out — the whole system is gated by the `BILLING_ENABLED` environment variable,
-so turning it on is a single config change with no code edits.
+Shipofix charges **exclusively through the Shopify Billing API**. Off-platform
+billing is not used (and is not allowed for App Store apps). Selecting a paid
+tier creates an `AppSubscription` and redirects the merchant to Shopify's
+**native approval/confirmation screen** — the plan is granted only after Shopify
+confirms the charge.
 
-| State | `BILLING_ENABLED` | Behaviour |
-|-------|-------------------|-----------|
-| Now (default) | unset / `false` | Free-for-all. Razorpay never contacted. |
-| Enforced | `true` | Advanced ($5/mo) and Premium ($10/mo) require a verified Razorpay subscription. No payment → no paid features. |
+## Tiers
 
-## How enforcement works (why the routes are safe)
+| Plan | Price | What it unlocks |
+|------|-------|-----------------|
+| Free | $0 | Up to 2 shipping zones, all 7 pricing models, manual editing. |
+| Advanced | $5/mo | Unlimited zones, manual editing. |
+| Premium | $10/mo | Everything, including the Excel bulk-edit workflow. |
 
-A paid tier is written to `AppSetting.plan` **only** by the signature-verified
-Razorpay webhook (`/webhooks/razorpay`). Because every gate in the app already
-reads the plan through `getEntitledPlan()`, a shop with no active subscription
-is transparently treated as **Free** — on the dashboard loader, the zone-limit
-check, and the bulk-upload check alike. There is no client-trusted path: the
-subscription action can only *start* a checkout, never grant access. An attacker
-cannot forge a webhook without `RAZORPAY_WEBHOOK_SECRET`.
+The prices and plan names live in **one place**: the `billing` config in
+[`app/shopify.server.js`](../app/shopify.server.js) (plan names `Advanced` /
+`Premium`). The picker UI mirrors them via `BILLING_PRICING` in
+[`app/lib/billing.server.js`](../app/lib/billing.server.js).
 
-`getEntitledPlan()` also degrades a *lapsed* paid plan to Free, so a cancelled or
-failed-renewal subscription loses paid features on the next request.
+## How it works
 
-## Credentials & environment variables
+1. **Picker** (`/app/subscription`): selecting a paid tier calls
+   `billing.request({ plan, isTest })`, which creates the subscription and
+   throws a redirect (out of the embedded iframe, via App Bridge) to Shopify's
+   confirmation URL. Selecting **Free** cancels any active subscription and is
+   granted instantly.
+2. **Approval**: the merchant approves (or declines) on Shopify's screen.
+3. **Return**: Shopify returns the merchant to the embedded app. The dashboard
+   loader runs `reconcileEntitlement()`, which calls `billing.check()` and
+   writes the authoritative plan to `AppSetting.plan`.
+4. **Webhook**: `app_subscriptions/update` (registered in
+   [`shopify.app.toml`](../shopify.app.toml)) keeps the cached plan in sync when
+   a change happens outside the app (e.g. a cancellation from the Shopify
+   admin), via `activePlanFromAdmin()`.
 
-Set these only when enabling billing:
-
-| Variable | Required | What it is / where to get it |
-|----------|----------|------------------------------|
-| `BILLING_ENABLED` | yes | `true` to enforce billing. |
-| `RAZORPAY_KEY_ID` | yes | Razorpay Dashboard → Settings → **API Keys** (`rzp_live_…` / `rzp_test_…`). |
-| `RAZORPAY_KEY_SECRET` | yes | Shown once when you generate the API key. Server-side only — never expose. |
-| `RAZORPAY_WEBHOOK_SECRET` | yes | A secret **you choose** when creating the webhook (Settings → Webhooks). Used to verify webhook authenticity. |
-| `RAZORPAY_PLAN_ADVANCED` | yes | Plan id (`plan_…`) of the $5/mo plan you create. |
-| `RAZORPAY_PLAN_PREMIUM` | yes | Plan id (`plan_…`) of the $10/mo plan you create. |
-| `BILLING_CURRENCY` | no | Defaults to `USD`. |
-| `BILLING_ADVANCED_AMOUNT` | no | Display/verification amount in cents. Default `500`. |
-| `BILLING_PREMIUM_AMOUNT` | no | Display/verification amount in cents. Default `1000`. |
-
-> The **authoritative** price is the Razorpay Plan you create; the `*_AMOUNT`
-> vars are only for what the picker shows and sanity checks.
-
-## One-time setup checklist
-
-1. **Razorpay account** — for USD charging, enable **International Payments**
-   (Dashboard → Settings → Configuration). Without it, use `BILLING_CURRENCY=INR`
-   and INR plan amounts instead.
-2. **Create two Plans** (Dashboard → Subscriptions → Plans): monthly, USD,
-   `$5.00` and `$10.00`. Copy each `plan_…` id → `RAZORPAY_PLAN_ADVANCED` /
-   `RAZORPAY_PLAN_PREMIUM`.
-3. **API Keys** (Settings → API Keys) → `RAZORPAY_KEY_ID` + `RAZORPAY_KEY_SECRET`.
-4. **Webhook** (Settings → Webhooks): URL = `https://<your-app-url>/webhooks/razorpay`,
-   set a secret → `RAZORPAY_WEBHOOK_SECRET`, and subscribe to:
-   `subscription.activated`, `subscription.charged`, `subscription.pending`,
-   `subscription.halted`, `subscription.cancelled`, `subscription.completed`.
-5. **Apply DB + client**: the billing columns are already migrated; in
-   production run `npx prisma migrate deploy && npx prisma generate` (the
-   `npm run setup` script does this). In dev, restart so the client regenerates.
-6. Set all env vars + `BILLING_ENABLED=true`, restart the app.
-
-## Going live: grandfathered shops
-
-If any shop already has `plan = 'advanced' | 'premium'` stored from the current
-free era, it will keep paid access when you enable billing. To force everyone to
-subscribe, run once before enabling:
-
-```sql
-UPDATE "AppSetting"
-SET plan = 'free', "billingStatus" = NULL, "billingPlan" = NULL
-WHERE plan IN ('advanced','premium');
-```
+`AppSetting.plan` is the cached entitlement every feature gate reads through
+`getEntitledPlan()`. Because it is reconciled from Shopify on every dashboard
+load, a lapsed/cancelled/spoofed paid plan can never unlock paid features — the
+truth always lives in Shopify, not in a client-trusted path.
 
 ## Test mode
 
-Use `rzp_test_…` keys and Razorpay test cards. The webhook must be reachable
-from the public internet (use the tunnel URL from `npm run dev`, or a staging
-deploy) for subscription activation to complete.
+By default subscriptions are created in **Shopify TEST mode** (`isTest = true`),
+so App Store reviewers and development/partner stores can approve the native
+confirmation screen without a real charge.
+
+| `BILLING_TEST` | Behaviour |
+|----------------|-----------|
+| unset / anything but `false` (default) | Test charges — no real money moves. |
+| `false` | Live charges — production merchants are billed for real. |
+
+Set `BILLING_TEST=false` in the production environment when you're ready to
+charge live. No code change is required.
+
+## Notes for reviewers / QA
+
+- Install on a development store, open the app, and click **Choose Advanced** or
+  **Choose Premium** on the plan page. You are redirected to Shopify's native
+  subscription approval screen (not an in-app toggle).
+- Approving returns you to the dashboard with the new tier active; the Bulk
+  Edit (Excel) tab appears on Premium.
+- Choosing **Free** cancels the subscription and returns you to Free instantly.

@@ -18,6 +18,7 @@
  * approval screen.
  */
 
+import { useEffect } from "react";
 import { redirect, useFetcher, useLoaderData } from "react-router";
 import {
   Badge,
@@ -98,15 +99,35 @@ export const action = async ({ request }) => {
   }
 
   /* Create the subscription and hand off to Shopify's NATIVE approval screen.
-     `billing.request` THROWS a redirect (out of the embedded iframe, via App
-     Bridge) to the confirmation URL — it never returns. The plan is NOT granted
-     here; it's granted on return once Shopify confirms the charge. */
-  return billing.request({
-    plan: billingPlanName(plan),
-    isTest,
-    // returnUrl omitted → defaults to the embedded app home, which reconciles
-    // the now-active subscription into AppSetting.plan on load.
-  });
+     `billing.request` always THROWS — it never returns. For an XHR/fetcher
+     submission (which carries an Authorization header) the library throws a 401
+     whose ONLY payload is the confirmation URL in the
+     `X-Shopify-API-Request-Failure-Reauthorize-Url` header, expecting App Bridge
+     to follow it. Under React Router single-fetch that header doesn't reliably
+     drive a redirect — the 401 just surfaces as an error page. So we catch the
+     thrown Response, extract the confirmation URL, and return it for the client
+     to navigate the top frame to. The plan is NOT granted here; it's granted on
+     return once Shopify confirms the charge.
+
+     returnUrl omitted → defaults to the embedded app home, which reconciles the
+     now-active subscription into AppSetting.plan on load. */
+  try {
+    await billing.request({ plan: billingPlanName(plan), isTest });
+  } catch (thrown) {
+    if (thrown instanceof Response) {
+      const confirmationUrl = thrown.headers.get(
+        "X-Shopify-API-Request-Failure-Reauthorize-Url",
+      );
+      if (confirmationUrl) {
+        return { success: true, confirmationUrl, plan };
+      }
+      // A non-XHR (document) request gets a real redirect Response — let it through.
+      throw thrown;
+    }
+    throw thrown;
+  }
+  // billing.request always throws; this is unreachable but keeps types honest.
+  return { success: false, error: "Couldn't start checkout. Please try again." };
 };
 
 const PLAN_CARDS = [
@@ -162,6 +183,24 @@ export default function SubscriptionPage() {
   const { currentPlan, pricing } = useLoaderData();
   const fetcher = useFetcher();
 
+  const confirmationUrl =
+    fetcher.data?.success === true ? fetcher.data.confirmationUrl : null;
+  const confirmingPlan =
+    fetcher.data?.success === true ? fetcher.data.plan : null;
+
+  /* Hand off to Shopify's native approval screen. The confirmation URL lives on
+     admin.shopify.com (outside this iframe), so we navigate the TOP frame — App
+     Bridge can't be relied on to follow the reauthorize-URL header on a
+     single-fetch action response. */
+  useEffect(() => {
+    if (confirmationUrl) {
+      window.top.location.href = confirmationUrl;
+    }
+  }, [confirmationUrl]);
+
+  /* Keep the button in its loading state while we redirect (the fetcher goes
+     idle once the action returns, but the page is on its way out). */
+  const redirecting = Boolean(confirmationUrl);
   const submittingPlan =
     fetcher.state !== "idle"
       ? String(fetcher.formData?.get("plan") || "")
@@ -263,8 +302,13 @@ export default function SubscriptionPage() {
                             fullWidth
                             size="large"
                             variant={isPopular ? "primary" : "secondary"}
-                            disabled={isCurrent || submittingPlan !== null}
-                            loading={submittingPlan === p.id}
+                            disabled={
+                              isCurrent || submittingPlan !== null || redirecting
+                            }
+                            loading={
+                              submittingPlan === p.id ||
+                              (redirecting && confirmingPlan === p.id)
+                            }
                           >
                             {isCurrent
                               ? "You're on this plan"

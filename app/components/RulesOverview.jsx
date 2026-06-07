@@ -711,58 +711,6 @@ export default function RulesOverview({
                   </BlockStack>
                 )}
               </BlockStack>
-
-              {/* Any per-destination overrides? show them — but only those
-                  whose country + province still appear in the rule's current
-                  coverage. Stale overrides (e.g. left behind after the
-                  coverage was narrowed in an older client build) would
-                  otherwise mislead the vendor into thinking the rule still
-                  applies to those regions. */}
-              {(() => {
-                const all = Array.isArray(viewModel.parsedRules.overrides)
-                  ? viewModel.parsedRules.overrides
-                  : [];
-                if (all.length === 0) return null;
-                const coverageByCountry = new Map();
-                for (const c of viewModel.parsedCountries) {
-                  if (!c.countryCode) continue;
-                  coverageByCountry.set(
-                    c.countryCode,
-                    new Set(
-                      (Array.isArray(c.provinces) ? c.provinces : [])
-                        .map((p) => p.code)
-                        .filter(Boolean),
-                    ),
-                  );
-                }
-                const liveOverrides = all.filter((o) => {
-                  if (!coverageByCountry.has(o.countryCode)) return false;
-                  const provs = coverageByCountry.get(o.countryCode);
-                  if (provs.size === 0) return true;
-                  return o.province ? provs.has(o.province) : true;
-                });
-                if (liveOverrides.length === 0) return null;
-                return (
-                  <BlockStack gap="200">
-                    <Text variant="headingSm" as="h3">
-                      Per-destination rate overrides
-                    </Text>
-                    <BlockStack gap="100">
-                      {liveOverrides.map((o, i) => (
-                        <InlineStack key={i} gap="200">
-                          <Text>
-                            {o.countryCode}
-                            {o.province ? ` · ${o.province}` : ""}
-                          </Text>
-                          <Text fontWeight="semibold">
-                            {o.rate} {viewingRule.currency}
-                          </Text>
-                        </InlineStack>
-                      ))}
-                    </BlockStack>
-                  </BlockStack>
-                );
-              })()}
             </BlockStack>
           </Modal.Section>
         )}
